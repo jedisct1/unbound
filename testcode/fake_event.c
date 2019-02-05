@@ -385,7 +385,7 @@ answer_callback_from_entry(struct replay_runtime* runtime,
 	repinfo.addrlen = pend->addrlen;
 	memcpy(&repinfo.addr, &pend->addr, pend->addrlen);
 	if(!pend->serviced) {
-		if(entry->reply_list->next &&
+		if(entry && entry->reply_list->next &&
 			pend->tcp_pkt_counter < count_reply_packets(entry)) {
 			/* go to next packet next time */
 			pend->tcp_pkt_counter++;
@@ -509,7 +509,7 @@ fake_pending_callback(struct replay_runtime* runtime,
 	repinfo.addrlen = p->addrlen;
 	memcpy(&repinfo.addr, &p->addr, p->addrlen);
 	if(!p->serviced) {
-		if(todo->match->reply_list->next && !error &&
+		if(todo->match && todo->match->reply_list->next && !error &&
 			p->tcp_pkt_counter < count_reply_packets(todo->match)) {
 			/* go to next packet next time */
 			p->tcp_pkt_counter++;
@@ -1814,6 +1814,12 @@ tcp_req_info_remove_mesh_state(struct tcp_req_info* ATTR_UNUSED(req),
 	struct mesh_state* ATTR_UNUSED(m))
 {
 	log_assert(0);
+}
+
+size_t
+tcp_req_info_get_stream_buffer_size(void)
+{
+	return 0;
 }
 
 /*********** End of Dummy routines ***********/

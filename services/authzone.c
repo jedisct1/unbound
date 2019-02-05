@@ -88,6 +88,9 @@
 #define AUTH_HTTPS_PORT 443
 /* max depth for nested $INCLUDEs */
 #define MAX_INCLUDE_DEPTH 10
+/** number of timeouts before we fallback from IXFR to AXFR,
+ * because some versions of servers (eg. dnsmasq) drop IXFR packets. */
+#define NUM_TIMEOUTS_FALLBACK_IXFR 3
 
 /** pick up nextprobe task to start waiting to perform transfer actions */
 static void xfr_set_timeout(struct auth_xfer* xfr, struct module_env* env,
@@ -1979,7 +1982,7 @@ int auth_zones_apply_cfg(struct auth_zones* az, struct config_file* cfg,
  * @param at: transfer structure with chunks list.  The chunks and their
  * 	data are freed.
  */
-void
+static void
 auth_chunks_delete(struct auth_transfer* at)
 {
 	if(at->chunks_first) {
@@ -2618,7 +2621,7 @@ az_nsec3_hashname(struct auth_zone* z, uint8_t* hashname, size_t* hashnmlen,
 }
 
 /** Find the datanode that covers the nsec3hash-name */
-struct auth_data*
+static struct auth_data*
 az_nsec3_findnode(struct auth_zone* z, uint8_t* hashnm, size_t hashnmlen)
 {
 	struct query_info qinfo;
@@ -4994,12 +4997,12 @@ xfr_transfer_lookup_host(struct auth_xfer* xfr, struct module_env* env)
 		qinfo.qtype = LDNS_RR_TYPE_AAAA;
 	qinfo.local_alias = NULL;
 	if(verbosity >= VERB_ALGO) {
-		char buf[512];
+		char buf1[512];
 		char buf2[LDNS_MAX_DOMAINLEN+1];
 		dname_str(xfr->name, buf2);
-		snprintf(buf, sizeof(buf), "auth zone %s: master lookup"
+		snprintf(buf1, sizeof(buf1), "auth zone %s: master lookup"
 			" for task_transfer", buf2);
-		log_query_info(VERB_ALGO, buf, &qinfo);
+		log_query_info(VERB_ALGO, buf1, &qinfo);
 	}
 	edns.edns_present = 1;
 	edns.ext_rcode = 0;
@@ -5636,15 +5639,33 @@ auth_xfer_transfer_tcp_callback(struct comm_point* c, void* arg, int err,
 		 * and continue task_transfer*/
 		verbose(VERB_ALGO, "xfr stopped, connection lost to %s",
 			xfr->task_transfer->master->host);
+
+		/* see if IXFR caused the failure, if so, try AXFR */
+		if(xfr->task_transfer->on_ixfr) {
+			xfr->task_transfer->ixfr_possible_timeout_count++;
+			if(xfr->task_transfer->ixfr_possible_timeout_count >=
+				NUM_TIMEOUTS_FALLBACK_IXFR) {
+				verbose(VERB_ALGO, "xfr to %s, fallback "
+					"from IXFR to AXFR (because of timeouts)",
+					xfr->task_transfer->master->host);
+				xfr->task_transfer->ixfr_fail = 1;
+				gonextonfail = 0;
+			}
+		}
+
 	failed:
 		/* delete transferred data from list */
 		auth_chunks_delete(xfr->task_transfer);
 		comm_point_delete(xfr->task_transfer->cp);
 		xfr->task_transfer->cp = NULL;
-		xfr_transfer_nextmaster(xfr);
+		if(gonextonfail)
+			xfr_transfer_nextmaster(xfr);
 		xfr_transfer_nexttarget_or_end(xfr, env);
 		return 0;
 	}
+	/* note that IXFR worked without timeout */
+	if(xfr->task_transfer->on_ixfr)
+		xfr->task_transfer->ixfr_possible_timeout_count = 0;
 
 	/* handle returned packet */
 	/* if it fails, cleanup and end this transfer */
@@ -6016,12 +6037,12 @@ xfr_probe_lookup_host(struct auth_xfer* xfr, struct module_env* env)
 		qinfo.qtype = LDNS_RR_TYPE_AAAA;
 	qinfo.local_alias = NULL;
 	if(verbosity >= VERB_ALGO) {
-		char buf[512];
+		char buf1[512];
 		char buf2[LDNS_MAX_DOMAINLEN+1];
 		dname_str(xfr->name, buf2);
-		snprintf(buf, sizeof(buf), "auth zone %s: master lookup"
+		snprintf(buf1, sizeof(buf1), "auth zone %s: master lookup"
 			" for task_probe", buf2);
-		log_query_info(VERB_ALGO, buf, &qinfo);
+		log_query_info(VERB_ALGO, buf1, &qinfo);
 	}
 	edns.edns_present = 1;
 	edns.ext_rcode = 0;

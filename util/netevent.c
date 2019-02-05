@@ -1687,6 +1687,29 @@ comm_point_tcp_handle_write(int fd, struct comm_point* c)
 	return 1;
 }
 
+/** read again to drain buffers when there could be more to read */
+static void
+tcp_req_info_read_again(int fd, struct comm_point* c)
+{
+	while(c->tcp_req_info->read_again) {
+		int r;
+		c->tcp_req_info->read_again = 0;
+		if(c->tcp_is_reading)
+			r = comm_point_tcp_handle_read(fd, c, 0);
+		else 	r = comm_point_tcp_handle_write(fd, c);
+		if(!r) {
+			reclaim_tcp_handler(c);
+			if(!c->tcp_do_close) {
+				fptr_ok(fptr_whitelist_comm_point(
+					c->callback));
+				(void)(*c->callback)(c, c->cb_arg, 
+					NETEVENT_CLOSED, NULL);
+			}
+			return;
+		}
+	}
+}
+
 void 
 comm_point_tcp_handle_callback(int fd, short event, void* arg)
 {
@@ -1716,6 +1739,7 @@ comm_point_tcp_handle_callback(int fd, short event, void* arg)
 #endif
 
 	if(event&UB_EV_READ) {
+		int has_tcpq = (c->tcp_req_info != NULL);
 		if(!comm_point_tcp_handle_read(fd, c, 0)) {
 			reclaim_tcp_handler(c);
 			if(!c->tcp_do_close) {
@@ -1725,9 +1749,12 @@ comm_point_tcp_handle_callback(int fd, short event, void* arg)
 					NETEVENT_CLOSED, NULL);
 			}
 		}
+		if(has_tcpq && c->tcp_req_info && c->tcp_req_info->read_again)
+			tcp_req_info_read_again(fd, c);
 		return;
 	}
 	if(event&UB_EV_WRITE) {
+		int has_tcpq = (c->tcp_req_info != NULL);
 		if(!comm_point_tcp_handle_write(fd, c)) {
 			reclaim_tcp_handler(c);
 			if(!c->tcp_do_close) {
@@ -1737,6 +1764,8 @@ comm_point_tcp_handle_callback(int fd, short event, void* arg)
 					NETEVENT_CLOSED, NULL);
 			}
 		}
+		if(has_tcpq && c->tcp_req_info && c->tcp_req_info->read_again)
+			tcp_req_info_read_again(fd, c);
 		return;
 	}
 	if(event&UB_EV_TIMEOUT) {

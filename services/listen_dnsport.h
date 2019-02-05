@@ -258,6 +258,8 @@ struct tcp_req_info {
 	int is_reply;
 	/** read channel has closed, just write pending results */
 	int read_is_closed;
+	/** read again */
+	int read_again;
 	/** number of outstanding requests */
 	int num_open_req;
 	/** list of outstanding requests */
@@ -361,5 +363,8 @@ void tcp_req_info_send_reply(struct tcp_req_info* req);
  * @return zero if nothing to do, just close the tcp.
  */
 int tcp_req_info_handle_read_close(struct tcp_req_info* req);
+
+/** get the size of currently used tcp stream wait buffers (in bytes) */
+size_t tcp_req_info_get_stream_buffer_size(void);
 
 #endif /* LISTEN_DNSPORT_H */
