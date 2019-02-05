@@ -1,5 +1,5 @@
 ; nameserver test file
-$ORIGIN example.net.
+$ORIGIN example.com.
 $TTL 3600
 
 ENTRY_BEGIN
@@ -7,9 +7,9 @@ MATCH opcode qtype qname noedns
 REPLY QR AA NOERROR
 ADJUST copy_id
 SECTION QUESTION
-www.example.net.	IN	A
+www.example.com.	IN	A
 SECTION ANSWER
-www.example.net.	IN	A	10.20.30.40
+www.example.com.	IN	A	10.20.30.40
 ENTRY_END
 
 ENTRY_BEGIN
