@@ -930,6 +930,8 @@ Setting this to "iterator" will result in a non\-validating server.
 Setting this to "validator iterator" will turn on DNSSEC validation.
 The ordering of the modules is important.
 You must also set trust\-anchors for validation to be useful.
+The default is "validator iterator".  When the server is built with
+EDNS client subnet support the default is "subnetcache validator iterator".
 .TP
 .B trust\-anchor\-file: \fI<filename>
 File with trusted keys for validation. Both DS and DNSKEY entries can appear
@@ -1619,7 +1621,6 @@ the '@' and '#', the '@' comes first.
 At high verbosity it logs the TLS certificate, with TLS enabled.
 If you leave out the '#' and auth name from the forward\-addr, any
 name is accepted.  The cert must also match a CA from the tls\-cert\-bundle.
-The cert name match code needs OpenSSL 1.1.0 or later to be enabled.
 .TP
 .B forward\-first: \fI<yes or no>
 If a forwarded query is met with a SERVFAIL error, and this option is

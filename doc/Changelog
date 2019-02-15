@@ -1,3 +1,21 @@
+14 February 2019: Wouter
+	- Fix capsforid canonical sort qsort callback.
+
+11 February 2019: Wouter
+	- Note default for module-config in man page.
+	- Fix recursion lame test for qname minimisation asked queries,
+	  that were not present in the set of prepared answers.
+	- Fix #13: Remove left-over requirements on OpenSSL >= 1.1.0 for
+	  cert name matching, from man page.
+	- make depend, with newer gcc, nicer layout.
+
+7 February 2019: Wouter
+	- Fix #4206: OpenSSL 1.0.2 hostname verification for FreeBSD 11.2.
+	- Fix that qname minimisation does not skip a label when missing
+	  nameserver targets need to be fetched.
+	- Fix #4225: clients seem to erroneously receive no answer with
+	  DNS-over-TLS and qname-minimisation.
+
 4 February 2019: Wouter
 	- Fix that log-replies prints the correct name for local-alias
 	  names, for names that have a CNAME in local-data configuration.
