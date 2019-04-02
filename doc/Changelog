@@ -1,3 +1,19 @@
+25 March 2019: Wouter
+	- Fix that tls-session-ticket-keys: "" on its own in unbound.conf
+	  disables the tls session ticker key calls into the OpenSSL API.
+	- Fix crash if tls-servic-pem not filled in when necessary.
+
+21 March 2019: Wouter
+	- Fix #4240: Fix whitespace cleanup in example.conf.
+
+19 March 2019: Wouter
+	- add type CAA to libpyunbound (accessing libunbound from python).
+
+18 March 2019: Wouter
+	- Add log message, at verbosity 4, that says the query is encrypted
+	  with TLS, if that is enabled for the query.
+	- Fix #4239: set NOTIMPL when deny-any is enabled, for RFC8482.
+
 7 March 2019: Wouter
 	- Fix for #4233: guard use of NDEBUG, so that it can be passed in
 	  CFLAGS into configure.
