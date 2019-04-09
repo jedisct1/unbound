@@ -2746,6 +2746,7 @@ az_nsec3_insert(struct auth_zone* z, struct regional* region,
  * 	that is an exact match that should exist for it.
  * 	If that does not exist, a higher exact match + nxproof is enabled
  * 	(for some sort of opt-out empty nonterminal cases).
+ * nodataproof: search for exact match and include that instead.
  * ceproof: include ce proof NSEC3 (omitted for wildcard replies).
  * nxproof: include denial of the qname.
  * wcproof: include denial of wildcard (wildcard.ce).
@@ -2753,7 +2754,8 @@ az_nsec3_insert(struct auth_zone* z, struct regional* region,
 static int
 az_add_nsec3_proof(struct auth_zone* z, struct regional* region,
 	struct dns_msg* msg, uint8_t* cenm, size_t cenmlen, uint8_t* qname,
-	size_t qname_len, int ceproof, int nxproof, int wcproof)
+	size_t qname_len, int nodataproof, int ceproof, int nxproof,
+	int wcproof)
 {
 	int algo;
 	size_t iter, saltlen;
@@ -2764,6 +2766,19 @@ az_add_nsec3_proof(struct auth_zone* z, struct regional* region,
 	/* find parameters of nsec3 proof */
 	if(!az_nsec3_param(z, &algo, &iter, &salt, &saltlen))
 		return 1; /* no nsec3 */
+	if(nodataproof) {
+		/* see if the node has a hash of itself for the nodata
+		 * proof nsec3, this has to be an exact match nsec3. */
+		struct auth_data* match;
+		match = az_nsec3_find_exact(z, qname, qname_len, algo,
+			iter, salt, saltlen);
+		if(match) {
+			if(!az_nsec3_insert(z, region, msg, match))
+				return 0;
+			/* only nodata NSEC3 needed, no CE or others. */
+			return 1;
+		}
+	}
 	/* find ce that has an NSEC3 */
 	if(ceproof) {
 		node = az_nsec3_find_ce(z, &cenm, &cenmlen, &no_exact_ce,
@@ -2916,7 +2931,7 @@ az_generate_notype_answer(struct auth_zone* z, struct regional* region,
 		/* DNSSEC denial NSEC3 */
 		if(!az_add_nsec3_proof(z, region, msg, node->name,
 			node->namelen, msg->qinfo.qname,
-			msg->qinfo.qname_len, 1, 0, 0))
+			msg->qinfo.qname_len, 1, 1, 0, 0))
 			return 0;
 	}
 	return 1;
@@ -2943,7 +2958,7 @@ az_generate_referral_answer(struct auth_zone* z, struct regional* region,
 		} else {
 			if(!az_add_nsec3_proof(z, region, msg, ce->name,
 				ce->namelen, msg->qinfo.qname,
-				msg->qinfo.qname_len, 1, 0, 0))
+				msg->qinfo.qname_len, 1, 1, 0, 0))
 				return 0;
 		}
 	}
@@ -2982,6 +2997,7 @@ az_generate_wildcard_answer(struct auth_zone* z, struct query_info* qinfo,
 	struct auth_data* wildcard, struct auth_data* node)
 {
 	struct auth_rrset* rrset, *nsec;
+	int insert_ce = 0;
 	if((rrset=az_domain_rrset(wildcard, qinfo->qtype)) != NULL) {
 		/* wildcard has type, add it */
 		if(!msg_add_rrset_an(z, region, msg, wildcard, rrset))
@@ -3008,6 +3024,10 @@ az_generate_wildcard_answer(struct auth_zone* z, struct query_info* qinfo,
 		/* call other notype routine for dnssec notype denials */
 		if(!az_generate_notype_answer(z, region, msg, wildcard))
 			return 0;
+		/* because the notype, there is no positive data with an
+		 * RRSIG that indicates the wildcard position.  Thus the
+		 * wildcard qname denial needs to have a CE nsec3. */
+		insert_ce = 1;
 	}
 
 	/* ce and node for dnssec denial of wildcard original name */
@@ -3019,7 +3039,7 @@ az_generate_wildcard_answer(struct auth_zone* z, struct query_info* qinfo,
 		dname_remove_label(&wildup, &wilduplen);
 		if(!az_add_nsec3_proof(z, region, msg, wildup,
 			wilduplen, msg->qinfo.qname,
-			msg->qinfo.qname_len, 0, 1, 0))
+			msg->qinfo.qname_len, 0, insert_ce, 1, 0))
 			return 0;
 	}
 
@@ -3045,7 +3065,7 @@ az_generate_nxdomain_answer(struct auth_zone* z, struct regional* region,
 	} else if(ce) {
 		if(!az_add_nsec3_proof(z, region, msg, ce->name,
 			ce->namelen, msg->qinfo.qname,
-			msg->qinfo.qname_len, 1, 1, 1))
+			msg->qinfo.qname_len, 0, 1, 1, 1))
 			return 0;
 	}
 	return 1;
@@ -5071,12 +5091,18 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 			&addr, addrlen, AUTH_TRANSFER_TIMEOUT, master->ssl,
 			master->host, master->file);
 		if(!xfr->task_transfer->cp) {
-			char zname[255+1];
+			char zname[255+1], as[256];
 			dname_str(xfr->name, zname);
+			addr_to_str(&addr, addrlen, as, sizeof(as));
 			verbose(VERB_ALGO, "cannot create http cp "
-				"connection for %s to %s", zname,
-				master->host);
+				"connection for %s to %s", zname, as);
 			return 0;
+		}
+		if(verbosity >= VERB_ALGO) {
+			char zname[255+1], as[256];
+			dname_str(xfr->name, zname);
+			addr_to_str(&addr, addrlen, as, sizeof(as));
+			verbose(VERB_ALGO, "auth zone %s transfer next HTTP fetch from %s started", zname, as);
 		}
 		return 1;
 	}
@@ -5093,11 +5119,19 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 		auth_xfer_transfer_tcp_callback, xfr, &addr, addrlen,
 		env->scratch_buffer, AUTH_TRANSFER_TIMEOUT);
 	if(!xfr->task_transfer->cp) {
-		char zname[255+1];
-		dname_str(xfr->name, zname);
+		char zname[255+1], as[256];
+ 		dname_str(xfr->name, zname);
+		addr_to_str(&addr, addrlen, as, sizeof(as));
 		verbose(VERB_ALGO, "cannot create tcp cp connection for "
-			"xfr %s to %s", zname, master->host);
+			"xfr %s to %s", zname, as);
 		return 0;
+	}
+	if(verbosity >= VERB_ALGO) {
+		char zname[255+1], as[256];
+ 		dname_str(xfr->name, zname);
+		addr_to_str(&addr, addrlen, as, sizeof(as));
+		verbose(VERB_ALGO, "auth zone %s transfer next %s fetch from %s started", zname, 
+			(xfr->task_transfer->on_ixfr?"IXFR":"AXFR"), as);
 	}
 	return 1;
 }
@@ -5116,6 +5150,11 @@ xfr_transfer_nexttarget_or_end(struct auth_xfer* xfr, struct module_env* env)
 			 * and we may then get an instant cache response,
 			 * and that calls the callback just like a full
 			 * lookup and lookup failures also call callback */
+			if(verbosity >= VERB_ALGO) {
+				char zname[255+1];
+				dname_str(xfr->name, zname);
+				verbose(VERB_ALGO, "auth zone %s transfer next target lookup", zname);
+			}
 			lock_basic_unlock(&xfr->lock);
 			return;
 		}
@@ -5133,6 +5172,11 @@ xfr_transfer_nexttarget_or_end(struct auth_xfer* xfr, struct module_env* env)
 		}
 		/* failed to fetch, next master */
 		xfr_transfer_nextmaster(xfr);
+	}
+	if(verbosity >= VERB_ALGO) {
+		char zname[255+1];
+		dname_str(xfr->name, zname);
+		verbose(VERB_ALGO, "auth zone %s transfer failed, wait", zname);
 	}
 
 	/* we failed to fetch the zone, move to wait task
@@ -5231,7 +5275,25 @@ void auth_xfer_transfer_lookup_callback(void* arg, int rcode, sldns_buffer* buf,
 			if(answer) {
 				xfr_master_add_addrs(xfr->task_transfer->
 					lookup_target, answer, wanted_qtype);
+			} else {
+				if(verbosity >= VERB_ALGO) {
+					char zname[255+1];
+					dname_str(xfr->name, zname);
+					verbose(VERB_ALGO, "auth zone %s host %s type %s transfer lookup has nodata", zname, xfr->task_transfer->lookup_target->host, (xfr->task_transfer->lookup_aaaa?"AAAA":"A"));
+				}
 			}
+		} else {
+			if(verbosity >= VERB_ALGO) {
+				char zname[255+1];
+				dname_str(xfr->name, zname);
+				verbose(VERB_ALGO, "auth zone %s host %s type %s transfer lookup has no answer", zname, xfr->task_transfer->lookup_target->host, (xfr->task_transfer->lookup_aaaa?"AAAA":"A"));
+			}
+		}
+	} else {
+		if(verbosity >= VERB_ALGO) {
+			char zname[255+1];
+			dname_str(xfr->name, zname);
+			verbose(VERB_ALGO, "auth zone %s host %s type %s transfer lookup failed", zname, xfr->task_transfer->lookup_target->host, (xfr->task_transfer->lookup_aaaa?"AAAA":"A"));
 		}
 	}
 	if(xfr->task_transfer->lookup_target->list &&
@@ -5842,10 +5904,11 @@ xfr_probe_send_probe(struct auth_xfer* xfr, struct module_env* env,
 		xfr->task_probe->cp = outnet_comm_point_for_udp(env->outnet,
 			auth_xfer_probe_udp_callback, xfr, &addr, addrlen);
 		if(!xfr->task_probe->cp) {
-			char zname[255+1];
+			char zname[255+1], as[256];
 			dname_str(xfr->name, zname);
+			addr_to_str(&addr, addrlen, as, sizeof(as));
 			verbose(VERB_ALGO, "cannot create udp cp for "
-				"probe %s to %s", zname, master->host);
+				"probe %s to %s", zname, as);
 			return 0;
 		}
 	}
@@ -5861,11 +5924,19 @@ xfr_probe_send_probe(struct auth_xfer* xfr, struct module_env* env,
 	/* send udp packet */
 	if(!comm_point_send_udp_msg(xfr->task_probe->cp, env->scratch_buffer,
 		(struct sockaddr*)&addr, addrlen)) {
-		char zname[255+1];
+		char zname[255+1], as[256];
 		dname_str(xfr->name, zname);
+		addr_to_str(&addr, addrlen, as, sizeof(as));
 		verbose(VERB_ALGO, "failed to send soa probe for %s to %s",
-			zname, master->host);
+			zname, as);
 		return 0;
+	}
+	if(verbosity >= VERB_ALGO) {
+		char zname[255+1], as[256];
+		dname_str(xfr->name, zname);
+		addr_to_str(&addr, addrlen, as, sizeof(as));
+		verbose(VERB_ALGO, "auth zone %s soa probe sent to %s", zname,
+			as);
 	}
 	xfr->task_probe->timeout = timeout;
 #ifndef S_SPLINT_S
@@ -5892,6 +5963,12 @@ auth_xfer_probe_timer_callback(void* arg)
 	}
 
 	if(xfr->task_probe->timeout <= AUTH_PROBE_TIMEOUT_STOP) {
+		if(verbosity >= VERB_ALGO) {
+			char zname[255+1];
+			dname_str(xfr->name, zname);
+			verbose(VERB_ALGO, "auth zone %s soa probe timeout",
+				zname);
+		}
 		/* try again with bigger timeout */
 		if(xfr_probe_send_probe(xfr, env, xfr->task_probe->timeout*2)) {
 			lock_basic_unlock(&xfr->lock);
@@ -6078,6 +6155,11 @@ xfr_probe_send_or_end(struct auth_xfer* xfr, struct module_env* env)
 			 * and we may then get an instant cache response,
 			 * and that calls the callback just like a full
 			 * lookup and lookup failures also call callback */
+			if(verbosity >= VERB_ALGO) {
+				char zname[255+1];
+				dname_str(xfr->name, zname);
+				verbose(VERB_ALGO, "auth zone %s probe next target lookup", zname);
+			}
 			lock_basic_unlock(&xfr->lock);
 			return;
 		}
@@ -6086,9 +6168,19 @@ xfr_probe_send_or_end(struct auth_xfer* xfr, struct module_env* env)
 	/* probe of list has ended.  Create or refresh the list of of
 	 * allow_notify addrs */
 	probe_copy_masters_for_allow_notify(xfr);
+	if(verbosity >= VERB_ALGO) {
+		char zname[255+1];
+		dname_str(xfr->name, zname);
+		verbose(VERB_ALGO, "auth zone %s probe: notify addrs updated", zname);
+	}
 	if(xfr->task_probe->only_lookup) {
 		/* only wanted lookups for copy, stop probe and start wait */
 		xfr->task_probe->only_lookup = 0;
+		if(verbosity >= VERB_ALGO) {
+			char zname[255+1];
+			dname_str(xfr->name, zname);
+			verbose(VERB_ALGO, "auth zone %s probe: finished only_lookup", zname);
+		}
 		xfr_probe_disown(xfr);
 		if(xfr->task_nextprobe->worker == NULL)
 			xfr_set_timeout(xfr, env, 0, 0);
@@ -6110,13 +6202,22 @@ xfr_probe_send_or_end(struct auth_xfer* xfr, struct module_env* env)
 	/* done with probe sequence, wait */
 	if(xfr->task_probe->have_new_lease) {
 		/* if zone not updated, start the wait timer again */
-		verbose(VERB_ALGO, "auth_zone unchanged, new lease, wait");
+		if(verbosity >= VERB_ALGO) {
+			char zname[255+1];
+			dname_str(xfr->name, zname);
+			verbose(VERB_ALGO, "auth_zone %s unchanged, new lease, wait", zname);
+		}
 		xfr_probe_disown(xfr);
 		if(xfr->have_zone)
 			xfr->lease_time = *env->now;
 		if(xfr->task_nextprobe->worker == NULL)
 			xfr_set_timeout(xfr, env, 0, 0);
 	} else {
+		if(verbosity >= VERB_ALGO) {
+			char zname[255+1];
+			dname_str(xfr->name, zname);
+			verbose(VERB_ALGO, "auth zone %s soa probe failed, wait to retry", zname);
+		}
 		/* we failed to send this as well, move to the wait task,
 		 * use the shorter retry timeout */
 		xfr_probe_disown(xfr);
@@ -6161,7 +6262,25 @@ void auth_xfer_probe_lookup_callback(void* arg, int rcode, sldns_buffer* buf,
 			if(answer) {
 				xfr_master_add_addrs(xfr->task_probe->
 					lookup_target, answer, wanted_qtype);
+			} else {
+				if(verbosity >= VERB_ALGO) {
+					char zname[255+1];
+					dname_str(xfr->name, zname);
+					verbose(VERB_ALGO, "auth zone %s host %s type %s probe lookup has nodata", zname, xfr->task_probe->lookup_target->host, (xfr->task_probe->lookup_aaaa?"AAAA":"A"));
+				}
 			}
+		} else {
+			if(verbosity >= VERB_ALGO) {
+				char zname[255+1];
+				dname_str(xfr->name, zname);
+				verbose(VERB_ALGO, "auth zone %s host %s type %s probe lookup has no address", zname, xfr->task_probe->lookup_target->host, (xfr->task_probe->lookup_aaaa?"AAAA":"A"));
+			}
+		}
+	} else {
+		if(verbosity >= VERB_ALGO) {
+			char zname[255+1];
+			dname_str(xfr->name, zname);
+			verbose(VERB_ALGO, "auth zone %s host %s type %s probe lookup failed", zname, xfr->task_probe->lookup_target->host, (xfr->task_probe->lookup_aaaa?"AAAA":"A"));
 		}
 	}
 	if(xfr->task_probe->lookup_target->list &&
