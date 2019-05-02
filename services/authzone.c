@@ -2042,11 +2042,13 @@ auth_xfer_delete(struct auth_xfer* xfr)
 	if(xfr->task_probe) {
 		auth_free_masters(xfr->task_probe->masters);
 		comm_point_delete(xfr->task_probe->cp);
+		comm_timer_delete(xfr->task_probe->timer);
 		free(xfr->task_probe);
 	}
 	if(xfr->task_transfer) {
 		auth_free_masters(xfr->task_transfer->masters);
 		comm_point_delete(xfr->task_transfer->cp);
+		comm_timer_delete(xfr->task_transfer->timer);
 		if(xfr->task_transfer->chunks_first) {
 			auth_chunks_delete(xfr->task_transfer);
 		}
@@ -4973,6 +4975,9 @@ xfr_process_chunk_list(struct auth_xfer* xfr, struct module_env* env,
 static void
 xfr_transfer_disown(struct auth_xfer* xfr)
 {
+	/* remove timer (from this worker's event base) */
+	comm_timer_delete(xfr->task_transfer->timer);
+	xfr->task_transfer->timer = NULL;
 	/* remove the commpoint */
 	comm_point_delete(xfr->task_transfer->cp);
 	xfr->task_transfer->cp = NULL;
@@ -5054,6 +5059,9 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 	struct sockaddr_storage addr;
 	socklen_t addrlen = 0;
 	struct auth_master* master = xfr->task_transfer->master;
+	char *auth_name = NULL;
+	struct timeval t;
+	int timeout;
 	if(!master) return 0;
 	if(master->allow_notify) return 0; /* only for notify */
 
@@ -5062,7 +5070,7 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 		addrlen = xfr->task_transfer->scan_addr->addrlen;
 		memmove(&addr, &xfr->task_transfer->scan_addr->addr, addrlen);
 	} else {
-		if(!extstrtoaddr(master->host, &addr, &addrlen)) {
+		if(!authextstrtoaddr(master->host, &addr, &addrlen, &auth_name)) {
 			/* the ones that are not in addr format are supposed
 			 * to be looked up.  The lookup has failed however,
 			 * so skip them */
@@ -5079,17 +5087,31 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 		comm_point_delete(xfr->task_transfer->cp);
 		xfr->task_transfer->cp = NULL;
 	}
+	if(!xfr->task_transfer->timer) {
+		xfr->task_transfer->timer = comm_timer_create(env->worker_base,
+			auth_xfer_transfer_timer_callback, xfr);
+		if(!xfr->task_transfer->timer) {
+			log_err("malloc failure");
+			return 0;
+		}
+	}
+	timeout = AUTH_TRANSFER_TIMEOUT;
+#ifndef S_SPLINT_S
+        t.tv_sec = timeout/1000;
+        t.tv_usec = (timeout%1000)*1000;
+#endif
 
 	if(master->http) {
 		/* perform http fetch */
 		/* store http port number into sockaddr,
 		 * unless someone used unbound's host@port notation */
+		xfr->task_transfer->on_ixfr = 0;
 		if(strchr(master->host, '@') == NULL)
 			sockaddr_store_port(&addr, addrlen, master->port);
 		xfr->task_transfer->cp = outnet_comm_point_for_http(
 			env->outnet, auth_xfer_transfer_http_callback, xfr,
-			&addr, addrlen, AUTH_TRANSFER_TIMEOUT, master->ssl,
-			master->host, master->file);
+			&addr, addrlen, -1, master->ssl, master->host,
+			master->file);
 		if(!xfr->task_transfer->cp) {
 			char zname[255+1], as[256];
 			dname_str(xfr->name, zname);
@@ -5098,6 +5120,7 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 				"connection for %s to %s", zname, as);
 			return 0;
 		}
+		comm_timer_set(xfr->task_transfer->timer, &t);
 		if(verbosity >= VERB_ALGO) {
 			char zname[255+1], as[256];
 			dname_str(xfr->name, zname);
@@ -5117,7 +5140,8 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 	/* connect on fd */
 	xfr->task_transfer->cp = outnet_comm_point_for_tcp(env->outnet,
 		auth_xfer_transfer_tcp_callback, xfr, &addr, addrlen,
-		env->scratch_buffer, AUTH_TRANSFER_TIMEOUT);
+		env->scratch_buffer, -1,
+		auth_name != NULL, auth_name);
 	if(!xfr->task_transfer->cp) {
 		char zname[255+1], as[256];
  		dname_str(xfr->name, zname);
@@ -5126,6 +5150,7 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 			"xfr %s to %s", zname, as);
 		return 0;
 	}
+	comm_timer_set(xfr->task_transfer->timer, &t);
 	if(verbosity >= VERB_ALGO) {
 		char zname[255+1], as[256];
  		dname_str(xfr->name, zname);
@@ -5678,6 +5703,46 @@ process_list_end_transfer(struct auth_xfer* xfr, struct module_env* env)
 	xfr_transfer_nexttarget_or_end(xfr, env);
 }
 
+/** callback for the task_transfer timer */
+void
+auth_xfer_transfer_timer_callback(void* arg)
+{
+	struct auth_xfer* xfr = (struct auth_xfer*)arg;
+	struct module_env* env;
+	int gonextonfail = 1;
+	log_assert(xfr->task_transfer);
+	lock_basic_lock(&xfr->lock);
+	env = xfr->task_transfer->env;
+	if(env->outnet->want_to_quit) {
+		lock_basic_unlock(&xfr->lock);
+		return; /* stop on quit */
+	}
+
+	verbose(VERB_ALGO, "xfr stopped, connection timeout to %s",
+		xfr->task_transfer->master->host);
+
+	/* see if IXFR caused the failure, if so, try AXFR */
+	if(xfr->task_transfer->on_ixfr) {
+		xfr->task_transfer->ixfr_possible_timeout_count++;
+		if(xfr->task_transfer->ixfr_possible_timeout_count >=
+			NUM_TIMEOUTS_FALLBACK_IXFR) {
+			verbose(VERB_ALGO, "xfr to %s, fallback "
+				"from IXFR to AXFR (because of timeouts)",
+				xfr->task_transfer->master->host);
+			xfr->task_transfer->ixfr_fail = 1;
+			gonextonfail = 0;
+		}
+	}
+
+	/* delete transferred data from list */
+	auth_chunks_delete(xfr->task_transfer);
+	comm_point_delete(xfr->task_transfer->cp);
+	xfr->task_transfer->cp = NULL;
+	if(gonextonfail)
+		xfr_transfer_nextmaster(xfr);
+	xfr_transfer_nexttarget_or_end(xfr, env);
+}
+
 /** callback for task_transfer tcp connections */
 int
 auth_xfer_transfer_tcp_callback(struct comm_point* c, void* arg, int err,
@@ -5694,6 +5759,8 @@ auth_xfer_transfer_tcp_callback(struct comm_point* c, void* arg, int err,
 		lock_basic_unlock(&xfr->lock);
 		return 0; /* stop on quit */
 	}
+	/* stop the timer */
+	comm_timer_disable(xfr->task_transfer->timer);
 
 	if(err != NETEVENT_NOERROR) {
 		/* connection failed, closed, or timeout */
@@ -5774,6 +5841,8 @@ auth_xfer_transfer_http_callback(struct comm_point* c, void* arg, int err,
 		return 0; /* stop on quit */
 	}
 	verbose(VERB_ALGO, "auth zone transfer http callback");
+	/* stop the timer */
+	comm_timer_disable(xfr->task_transfer->timer);
 
 	if(err != NETEVENT_NOERROR && err != NETEVENT_DONE) {
 		/* connection failed, closed, or timeout */
@@ -5871,6 +5940,7 @@ xfr_probe_send_probe(struct auth_xfer* xfr, struct module_env* env,
 	struct timeval t;
 	/* pick master */
 	struct auth_master* master = xfr_probe_current_master(xfr);
+	char *auth_name = NULL;
 	if(!master) return 0;
 	if(master->allow_notify) return 0; /* only for notify */
 	if(master->http) return 0; /* only masters get SOA UDP probe,
@@ -5881,7 +5951,7 @@ xfr_probe_send_probe(struct auth_xfer* xfr, struct module_env* env,
 		addrlen = xfr->task_probe->scan_addr->addrlen;
 		memmove(&addr, &xfr->task_probe->scan_addr->addr, addrlen);
 	} else {
-		if(!extstrtoaddr(master->host, &addr, &addrlen)) {
+		if(!authextstrtoaddr(master->host, &addr, &addrlen, &auth_name)) {
 			/* the ones that are not in addr format are supposed
 			 * to be looked up.  The lookup has failed however,
 			 * so skip them */
@@ -5890,6 +5960,18 @@ xfr_probe_send_probe(struct auth_xfer* xfr, struct module_env* env,
 			log_err("%s: failed lookup, cannot probe to master %s",
 				zname, master->host);
 			return 0;
+		}
+		if (auth_name != NULL) {
+			if (addr.ss_family == AF_INET
+			&&  ntohs(((struct sockaddr_in *)&addr)->sin_port)
+		            == env->cfg->ssl_port)
+				((struct sockaddr_in *)&addr)->sin_port
+					= htons(env->cfg->port);
+			else if (addr.ss_family == AF_INET6
+			&&  ntohs(((struct sockaddr_in6 *)&addr)->sin6_port)
+		            == env->cfg->ssl_port)
+                        	((struct sockaddr_in6 *)&addr)->sin6_port
+					= htons(env->cfg->port);
 		}
 	}
 
@@ -5900,7 +5982,18 @@ xfr_probe_send_probe(struct auth_xfer* xfr, struct module_env* env,
 		xfr->task_probe->id = (uint16_t)(ub_random(env->rnd)&0xffff);
 	xfr_create_soa_probe_packet(xfr, env->scratch_buffer, 
 		xfr->task_probe->id);
+	/* we need to remove the cp if we have a different ip4/ip6 type now */
+	if(xfr->task_probe->cp &&
+		((xfr->task_probe->cp_is_ip6 && !addr_is_ip6(&addr, addrlen)) ||
+		(!xfr->task_probe->cp_is_ip6 && addr_is_ip6(&addr, addrlen)))
+		) {
+		comm_point_delete(xfr->task_probe->cp);
+		xfr->task_probe->cp = NULL;
+	}
 	if(!xfr->task_probe->cp) {
+		if(addr_is_ip6(&addr, addrlen))
+			xfr->task_probe->cp_is_ip6 = 1;
+		else 	xfr->task_probe->cp_is_ip6 = 0;
 		xfr->task_probe->cp = outnet_comm_point_for_udp(env->outnet,
 			auth_xfer_probe_udp_callback, xfr, &addr, addrlen);
 		if(!xfr->task_probe->cp) {
@@ -5962,13 +6055,12 @@ auth_xfer_probe_timer_callback(void* arg)
 		return; /* stop on quit */
 	}
 
+	if(verbosity >= VERB_ALGO) {
+		char zname[255+1];
+		dname_str(xfr->name, zname);
+		verbose(VERB_ALGO, "auth zone %s soa probe timeout", zname);
+	}
 	if(xfr->task_probe->timeout <= AUTH_PROBE_TIMEOUT_STOP) {
-		if(verbosity >= VERB_ALGO) {
-			char zname[255+1];
-			dname_str(xfr->name, zname);
-			verbose(VERB_ALGO, "auth zone %s soa probe timeout",
-				zname);
-		}
 		/* try again with bigger timeout */
 		if(xfr_probe_send_probe(xfr, env, xfr->task_probe->timeout*2)) {
 			lock_basic_unlock(&xfr->lock);

@@ -1,3 +1,48 @@
+2 May 2019: Wouter
+	- contrib/fastrpz.patch updated for code changes, and with git diff.
+	- Fix .gitignore, add pythonmod and dnstap generated files.
+	  And unit test generated files, and generated doc files.
+
+1 May 2019: Wouter
+	- Update makedist for git.
+	- Nicer travis output for clang analysis.
+	- PR #16: XoT support, AXFR over TLS, turn it on with
+	  master: <ip>#<authname> in unbound.conf.  This uses TLS to
+	  download the AXFR (or IXFR).
+
+25 April 2019: Wouter
+	- Fix wrong query name in local zone redirect answers with a CNAME,
+	  the copy of the local alias is in unpacked form.
+
+18 April 2019: Ralph
+	- Scrub RRs from answer section when reusing NXDOMAIN message for
+	  subdomain answers.
+	- For harden-below-nxdomain: do not consider a name to be non-exitent
+	  when message contains a CNAME record.
+
+18 April 2019: Wouter
+	- travis build file.
+
+16 April 2019: Wouter
+	- Better braces in if statement in TCP fastopen code.
+	- iana portlist updated.
+
+15 April 2019: Wouter
+	- Fix tls write event for read state change to re-call SSL_write and
+	  not resume the TLS handshake.
+
+11 April 2019: George
+	- Update python documentation for init_standard().
+	- Typos.
+
+11 April 2019: Wouter
+	- Fix that auth zone uses correct network type for sockets for
+	  SOA serial probes.  This fixes that probes fail because earlier
+	  probe addresses are unreachable.
+	- Fix that auth zone fails over to next master for timeout in tcp.
+	- Squelch SSL read and write connection reset by peer and broken pipe 
+	  messages.  Verbosity 2 and higher enables them.
+
 8 April 2019: Wouter
 	- Fix to use event_assign with libevent for thread-safety.
 	- verbose information about auth zone lookup process, also lookup
