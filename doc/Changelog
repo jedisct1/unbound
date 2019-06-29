@@ -1,6 +1,38 @@
+25 June 2019: Wouter
+	- For #45, check that 127.0.0.1 and ::1 are not used in unbound.conf
+	  when do-not-query-localhost is turned on, or at default on,
+	  unbound-checkconf prints a warning if it is found in forward-addr or
+	  stub-addr statements.
+
+24 June 2019: Wouter
+	- Fix memleak in unit test, reported from the clang 8.0 static analyzer.
+
+18 June 2019: Wouter
+	- PR #28: IPSet module, by Kevin Chou.  Created a module to support
+	  the ipset that could add the domain's ip to a list easily.
+	  Needs libmnl, and --enable-ipset and config it, doc/README.ipset.md.
+	- Fix to omit RRSIGs from addition to the ipset.
+	- Fix to make unbound-control with ipset, remove unused variable,
+	  use unsigned type because of comparison, and assign null instead
+	  of compare with it.  Remade lex and yacc output.
+	- make depend
+	- Added documentation to the ipset files (for doxygen output).
+	- Merge PR #6: Python module: support multiple instances
+	- Merge PR #5: Python module: define constant MODULE_RESTART_NEXT
+	- Merge PR #4: Python module: assign something useful to the
+	  per-query data store 'qdata' 
+	- Fix python dict reference and double free in config.
+
+17 June 2019: Wouter
+	- Master contains version 1.9.3 in development.
+	- Fix #39: In libunbound, leftover logfile is close()d unpredictably.
+	- Fix for #24: Fix abort due to scan of auth zone masters using old
+	  address from previous scan.
+
 12 June 2019: Wouter
 	- Fix another spoolbuf storage code point, in prefetch.
-	- 1.9.2rc3 release candidate tag.
+	- 1.9.2rc3 release candidate tag.  Which became the 1.9.2 release
+	  on 17 June 2019.
 
 11 June 2019: Wouter
 	- Fix that fixes the Fix that spoolbuf is not used to store tcp
