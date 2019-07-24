@@ -1,3 +1,24 @@
+23 July 2019: Wouter
+	- Fix question section mismatch in local zone redirect.
+
+19 July 2019: Wouter
+	- Fix #49: Set no renegotiation on the SSL context to stop client
+	  session renegotiation.
+
+12 July 2019: Wouter
+	- Fix #48: Unbound returns additional records on NODATA response,
+	  if minimal-responses is enabled, also the additional for negative
+	  responses is removed.
+
+9 July 2019: Ralph
+	- Fix in respip addrtree selection. Absence of addr_tree_init_parents()
+	  call made it impossible to go up the tree when the matching netmask is
+	  too specific.
+
+5 July 2019: Ralph
+	- Fix for possible assertion failure when answering respip CNAME from
+	  cache.
+
 25 June 2019: Wouter
 	- For #45, check that 127.0.0.1 and ::1 are not used in unbound.conf
 	  when do-not-query-localhost is turned on, or at default on,
