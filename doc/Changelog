@@ -1,3 +1,16 @@
+1 August 2019: Wouter
+	- For #52 #53, second context does not close logfile override.
+	- Fix #52 #53, fix for example fail program.
+	- Fix to return after failed auth zone http chunk write.
+	- Fix to remove unused test for task_probe existance.
+	- Fix to timeval_add for remaining second in microseconds.
+	- Check repinfo in worker_handle_request, if null, drop it.
+
+29 July 2019: Wouter
+	- Add verbose log message when auth zone file is written, at level 4.
+	- Add hex print of trust anchor pointer to trust anchor file temp
+	  name to make it unique, for libunbound created multiple contexts.
+
 23 July 2019: Wouter
 	- Fix question section mismatch in local zone redirect.
 
