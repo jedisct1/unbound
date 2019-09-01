@@ -11,8 +11,8 @@ sinclude(dnscrypt/dnscrypt.m4)
 # must be numbers. ac_defun because of later processing
 m4_define([VERSION_MAJOR],[1])
 m4_define([VERSION_MINOR],[9])
-m4_define([VERSION_MICRO],[3])
-AC_INIT(unbound, m4_defn([VERSION_MAJOR]).m4_defn([VERSION_MINOR]).m4_defn([VERSION_MICRO]), unbound-bugs@nlnetlabs.nl, unbound)
+m4_define([VERSION_MICRO],[4])
+AC_INIT(unbound, m4_defn([VERSION_MAJOR]).m4_defn([VERSION_MINOR]).m4_defn([VERSION_MICRO]), unbound-bugs@nlnetlabs.nl or https://github.com/NLnetLabs/unbound/issues, unbound)
 AC_SUBST(UNBOUND_VERSION_MAJOR, [VERSION_MAJOR])
 AC_SUBST(UNBOUND_VERSION_MINOR, [VERSION_MINOR])
 AC_SUBST(UNBOUND_VERSION_MICRO, [VERSION_MICRO])
@@ -89,6 +89,7 @@ LIBUNBOUND_AGE=1
 # 1.9.1 had 9:1:1
 # 1.9.2 had 9:2:1
 # 1.9.3 had 9:3:1
+# 1.9.4 had 9:4:1
 
 #   Current  -- the number of the binary API that we're implementing
 #   Revision -- which iteration of the implementation of the binary
@@ -111,6 +112,10 @@ LIBUNBOUND_AGE=1
 AC_SUBST(LIBUNBOUND_CURRENT)
 AC_SUBST(LIBUNBOUND_REVISION)
 AC_SUBST(LIBUNBOUND_AGE)
+
+
+cmdln="`echo $@ | sed -e 's/\\\\/\\\\\\\\/g' | sed -e 's/"/\\\\"/'g`"
+AC_DEFINE_UNQUOTED(CONFCMDLINE, ["$cmdln"], [Command line arguments used with configure])
 
 CFLAGS="$CFLAGS"
 AC_AIX
@@ -475,6 +480,10 @@ if echo "$host" | grep -i -e linux -e dragonfly >/dev/null; then
 else
 	AC_DEFINE(REUSEPORT_DEFAULT, 0, [if REUSEPORT is enabled by default])
 fi
+
+# Include systemd.m4 - begin
+sinclude(systemd.m4)
+# Include systemd.m4 - end
 
 # set memory allocation checking if requested
 AC_ARG_ENABLE(alloc-checks, AC_HELP_STRING([--enable-alloc-checks],
@@ -1296,10 +1305,6 @@ if test x_$enable_static_exe = x_yes; then
 		LIBS="$LIBS -lz"
 	fi
 fi
-
-# Include systemd.m4 - begin
-sinclude(systemd.m4)
-# Include systemd.m4 - end
 
 # set lock checking if requested
 AC_ARG_ENABLE(lock_checks, AC_HELP_STRING([--enable-lock-checks],
