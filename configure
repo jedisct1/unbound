@@ -850,6 +850,7 @@ enable_alloc_lite
 enable_alloc_nonregional
 with_pthreads
 with_solaris_threads
+with_syslog_facility
 with_pyunbound
 with_pythonmodule
 enable_swig_version_check
@@ -1604,6 +1605,8 @@ Optional Packages:
   --with-pthreads         use pthreads library, or --without-pthreads to
                           disable threading support.
   --with-solaris-threads  use solaris native thread library.
+  --with-syslog-facility=LOCAL0 - LOCAL7
+                          set SYSLOG_FACILITY, default DAEMON
   --with-pyunbound        build PyUnbound, or --without-pyunbound to skip it.
                           (default=no)
   --with-pythonmodule     build Python module, or --without-pythonmodule to
@@ -17099,6 +17102,26 @@ fi
 
 fi # end of non-mingw check of thread libraries
 
+# Check for SYSLOG_FACILITY
+
+# Check whether --with-syslog-facility was given.
+if test "${with_syslog_facility+set}" = set; then :
+  withval=$with_syslog_facility;  UNBOUND_SYSLOG_FACILITY="$withval"
+fi
+
+case "${UNBOUND_SYSLOG_FACILITY}" in
+
+  LOCAL[0-7]) UNBOUND_SYSLOG_FACILITY="LOG_${UNBOUND_SYSLOG_FACILITY}" ;;
+
+           *) UNBOUND_SYSLOG_FACILITY="LOG_DAEMON" ;;
+
+esac
+
+cat >>confdefs.h <<_ACEOF
+#define UB_SYSLOG_FACILITY ${UNBOUND_SYSLOG_FACILITY}
+_ACEOF
+
+
 # Check for PyUnbound
 
 # Check whether --with-pyunbound was given.
@@ -18174,16 +18197,6 @@ fi
 
 cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_ARC4RANDOM_UNIFORM $ac_have_decl
-_ACEOF
-ac_fn_c_check_decl "$LINENO" "reallocarray" "ac_cv_have_decl_reallocarray" "$ac_includes_default"
-if test "x$ac_cv_have_decl_reallocarray" = xyes; then :
-  ac_have_decl=1
-else
-  ac_have_decl=0
-fi
-
-cat >>confdefs.h <<_ACEOF
-#define HAVE_DECL_REALLOCARRAY $ac_have_decl
 _ACEOF
 
 else
@@ -20199,6 +20212,17 @@ esac
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
+ac_fn_c_check_decl "$LINENO" "reallocarray" "ac_cv_have_decl_reallocarray" "$ac_includes_default"
+if test "x$ac_cv_have_decl_reallocarray" = xyes; then :
+  ac_have_decl=1
+else
+  ac_have_decl=0
+fi
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_DECL_REALLOCARRAY $ac_have_decl
+_ACEOF
+
 if test "$USE_NSS" = "no"; then
 	ac_fn_c_check_func "$LINENO" "arc4random" "ac_cv_func_arc4random"
 if test "x$ac_cv_func_arc4random" = xyes; then :
