@@ -1,3 +1,15 @@
+26 September 2019: Wouter
+	- Merge #87 from hardfalcon: Fix contrib/unbound.service.in,
+	  Drop CAP_KILL, use + prefix for ExecReload= instead.
+
+25 September 2019: Wouter
+	- The unbound.conf includes are sorted ascending, for include
+	  statements with a '*' from glob.
+
+23 September 2019: Wouter
+	- Merge #85 for #84 from sam-lunt: Add kill capability to systemd
+	  service file to fix that systemctl reload fails.
+
 20 September 2019: Wouter
 	- Merge #82 from hardfalcon: Downgrade CAP_NET_ADMIN to CAP_NET_RAW
 	  in unbound.service.
