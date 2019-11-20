@@ -615,7 +615,7 @@ setup_ssl(SSL_CTX* ctx, int fd)
 	if(!ssl)
 		ssl_err("could not SSL_new");
 	SSL_set_connect_state(ssl);
-	(void)SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
+	(void)SSL_set_mode(ssl, (long)SSL_MODE_AUTO_RETRY);
 	if(!SSL_set_fd(ssl, fd))
 		ssl_err("could not SSL_set_fd");
 	while(1) {
@@ -687,6 +687,27 @@ remote_write(SSL* ssl, int fd, const char* buf, size_t len)
 			fatal_exit("could not send: %s", wsa_strerror(WSAGetLastError()));
 #endif
 		}
+	}
+}
+
+/** check args, to see if too many args. Because when a file is sent it
+ * would wait for the terminal, and we can check for too many arguments,
+ * eg. user put arguments on the commandline. */
+static void
+check_args_for_listcmd(int argc, char* argv[])
+{
+	if(argc >= 1 && (strcmp(argv[0], "local_zones") == 0 ||
+		strcmp(argv[0], "local_zones_remove") == 0 ||
+		strcmp(argv[0], "local_datas") == 0 ||
+		strcmp(argv[0], "local_datas_remove") == 0) &&
+		argc >= 2) {
+		fatal_exit("too many arguments for command '%s', "
+			"content is piped in from stdin", argv[0]);
+	}
+	if(argc >= 1 && strcmp(argv[0], "view_local_datas") == 0 &&
+		argc >= 3) {
+		fatal_exit("too many arguments for command '%s', "
+			"content is piped in from stdin", argv[0]);
 	}
 }
 
@@ -853,6 +874,7 @@ int main(int argc, char* argv[])
 		print_stats_shm(cfgfile);
 		return 0;
 	}
+	check_args_for_listcmd(argc, argv);
 
 #ifdef USE_WINSOCK
 	if((r = WSAStartup(MAKEWORD(2,2), &wsa_data)) != 0)
@@ -866,7 +888,9 @@ int main(int argc, char* argv[])
 	ERR_load_SSL_strings();
 #endif
 #if OPENSSL_VERSION_NUMBER < 0x10100000 || !defined(HAVE_OPENSSL_INIT_CRYPTO)
+#  ifndef S_SPLINT_S
 	OpenSSL_add_all_algorithms();
+#  endif
 #else
 	OPENSSL_init_crypto(OPENSSL_INIT_ADD_ALL_CIPHERS
 		| OPENSSL_INIT_ADD_ALL_DIGESTS

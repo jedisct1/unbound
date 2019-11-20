@@ -11,14 +11,14 @@ sinclude(dnscrypt/dnscrypt.m4)
 # must be numbers. ac_defun because of later processing
 m4_define([VERSION_MAJOR],[1])
 m4_define([VERSION_MINOR],[9])
-m4_define([VERSION_MICRO],[5])
+m4_define([VERSION_MICRO],[6])
 AC_INIT(unbound, m4_defn([VERSION_MAJOR]).m4_defn([VERSION_MINOR]).m4_defn([VERSION_MICRO]), unbound-bugs@nlnetlabs.nl or https://github.com/NLnetLabs/unbound/issues, unbound)
 AC_SUBST(UNBOUND_VERSION_MAJOR, [VERSION_MAJOR])
 AC_SUBST(UNBOUND_VERSION_MINOR, [VERSION_MINOR])
 AC_SUBST(UNBOUND_VERSION_MICRO, [VERSION_MICRO])
 
 LIBUNBOUND_CURRENT=9
-LIBUNBOUND_REVISION=5
+LIBUNBOUND_REVISION=6
 LIBUNBOUND_AGE=1
 # 1.0.0 had 0:12:0
 # 1.0.1 had 0:13:0
@@ -91,6 +91,7 @@ LIBUNBOUND_AGE=1
 # 1.9.3 had 9:3:1
 # 1.9.4 had 9:4:1
 # 1.9.5 had 9:5:1
+# 1.9.6 had 9:6:1
 
 #   Current  -- the number of the binary API that we're implementing
 #   Revision -- which iteration of the implementation of the binary
@@ -431,6 +432,7 @@ AC_INCLUDES_DEFAULT
 # endif
 #endif
 ])
+AC_CHECK_SIZEOF(size_t)
 
 # add option to disable the evil rpath
 ACX_ARG_RPATH
@@ -476,7 +478,7 @@ ACX_MKDIR_ONE_ARG
 AC_CHECK_FUNCS([strptime],[AC_CHECK_STRPTIME_WORKS],[AC_LIBOBJ([strptime])])
 
 # check if we can use SO_REUSEPORT
-if echo "$host" | grep -i -e linux -e dragonfly >/dev/null; then
+if echo "$host" | $GREP -i -e linux -e dragonfly >/dev/null; then
 	AC_DEFINE(REUSEPORT_DEFAULT, 1, [if REUSEPORT is enabled by default])
 else
 	AC_DEFINE(REUSEPORT_DEFAULT, 0, [if REUSEPORT is enabled by default])
@@ -835,6 +837,42 @@ AC_INCLUDES_DEFAULT
 #include <openssl/ssl.h>
 #include <openssl/evp.h>
 ])
+
+if test "$ac_cv_func_HMAC_Init_ex" = "yes"; then
+# check function return type.
+AC_MSG_CHECKING(the return type of HMAC_Init_ex)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
+#ifdef HAVE_OPENSSL_ERR_H
+#include <openssl/err.h>
+#endif
+
+#ifdef HAVE_OPENSSL_RAND_H
+#include <openssl/rand.h>
+#endif
+
+#ifdef HAVE_OPENSSL_CONF_H
+#include <openssl/conf.h>
+#endif
+
+#ifdef HAVE_OPENSSL_ENGINE_H
+#include <openssl/engine.h>
+#endif
+#include <openssl/ssl.h>
+#include <openssl/evp.h>
+], [
+	HMAC_CTX* hmac_ctx = NULL;
+	void* hmac_key = NULL;
+	const EVP_MD* digest = NULL;
+	int x = HMAC_Init_ex(hmac_ctx, hmac_key, 32, digest, NULL);
+	(void)x;
+])], [
+	AC_MSG_RESULT(int)
+], [
+	AC_MSG_RESULT(void)
+	AC_DEFINE([HMAC_INIT_EX_RETURNS_VOID], 1, [If HMAC_Init_ex() returns void])
+])
+fi
+
 fi
 AC_SUBST(SSLLIB)
 
@@ -1527,6 +1565,9 @@ if test "$USE_NSS" = "no"; then
 					LIBS="$LIBS -lmd"
 				fi
 				AC_SEARCH_LIBS([clock_gettime], [rt])
+			;;
+			*freebsd*|*FreeBSD)
+				AC_LIBOBJ(getentropy_freebsd)
 			;;
 			*linux*|Linux|*)
 				AC_LIBOBJ(getentropy_linux)

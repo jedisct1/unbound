@@ -1654,7 +1654,7 @@ auth_rr_to_string(uint8_t* nm, size_t nmlen, uint16_t tp, uint16_t cl,
 	}
 	w += sldns_str_print(&s, &slen, "\n");
 
-	if(w > (int)buflen) {
+	if(w >= (int)buflen) {
 		log_nametypeclass(0, "RR too long to print", nm, tp, cl);
 		return 0;
 	}
@@ -5971,15 +5971,15 @@ xfr_probe_send_probe(struct auth_xfer* xfr, struct module_env* env,
 		}
 		if (auth_name != NULL) {
 			if (addr.ss_family == AF_INET
-			&&  ntohs(((struct sockaddr_in *)&addr)->sin_port)
+			&&  (int)ntohs(((struct sockaddr_in *)&addr)->sin_port)
 		            == env->cfg->ssl_port)
 				((struct sockaddr_in *)&addr)->sin_port
-					= htons(env->cfg->port);
+					= htons((uint16_t)env->cfg->port);
 			else if (addr.ss_family == AF_INET6
-			&&  ntohs(((struct sockaddr_in6 *)&addr)->sin6_port)
+			&&  (int)ntohs(((struct sockaddr_in6 *)&addr)->sin6_port)
 		            == env->cfg->ssl_port)
                         	((struct sockaddr_in6 *)&addr)->sin6_port
-					= htons(env->cfg->port);
+					= htons((uint16_t)env->cfg->port);
 		}
 	}
 

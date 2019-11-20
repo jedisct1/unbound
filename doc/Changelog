@@ -1,3 +1,42 @@
+19 November 2019: Wouter
+	- Fix CVE-2019-18934, shell execution in ipsecmod.
+	- 1.9.5 is 1.9.4 with bugfix, trunk is 1.9.6 in development.
+	- Fix authzone printout buffer length check.
+	- Fixes to please lint checks.
+	- Fix Integer Overflow in Regional Allocator,
+	  reported by X41 D-Sec.
+	- Fix Unchecked NULL Pointer in dns64_inform_super()
+	  and ipsecmod_new(), reported by X41 D-Sec.
+	- Fix Out-of-bounds Read in rr_comment_dnskey(),
+	  reported by X41 D-Sec.
+	- Fix Integer Overflows in Size Calculations,
+	  reported by X41 D-Sec.
+	- Fix Integer Overflow to Buffer Overflow in
+	  sldns_str2wire_dname_buf_origin(), reported by X41 D-Sec.
+	- Fix Out of Bounds Read in sldns_str2wire_dname(),
+	  reported by X41 D-Sec.
+	- Fix Out of Bounds Write in sldns_bget_token_par(),
+	  reported by X41 D-Sec.
+
+18 November 2019: Wouter
+	- In unbound-host use separate variable for get_option to please
+	  code checkers.
+	- update to bison output of 3.4.1 in code repository.
+	- Provide a prototype for compat malloc to remove compile warning.
+	- Portable grep usage for reuseport configure test.
+	- Check return type of HMAC_Init_ex for openssl 0.9.8.
+	- gitignore .source tempfile used for compatible make.
+
+13 November 2019: Wouter
+	- iana portlist updated.
+	- contrib/fastrpz.patch updated to apply for current code.
+	- fixes for splint cleanliness, long vs int in SSL set_mode.
+
+11 November 2019: Wouter
+	- Fix #109: check number of arguments for stdin-pipes in
+	  unbound-control and fail if too many arguments.
+	- Merge #102 from jrtc27: Add getentropy emulation for FreeBSD.
+
 24 October 2019: Wouter
 	- Fix #99: Memory leak in ub_ctx (event_base will never be freed).
 

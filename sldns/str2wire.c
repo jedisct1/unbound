@@ -150,6 +150,10 @@ int sldns_str2wire_dname_buf_origin(const char* str, uint8_t* buf, size_t* len,
 	if(s) return s;
 
 	if(rel && origin && dlen > 0) {
+		if((unsigned)dlen >= 0x00ffffffU ||
+			(unsigned)origin_len >= 0x00ffffffU)
+			/* guard against integer overflow in addition */
+			return RET_ERR(LDNS_WIREPARSE_ERR_GENERAL, *len);
 		if(dlen + origin_len - 1 > LDNS_MAX_DOMAINLEN)
 			return RET_ERR(LDNS_WIREPARSE_ERR_DOMAINNAME_OVERFLOW,
 				LDNS_MAX_DOMAINLEN);
@@ -168,7 +172,9 @@ uint8_t* sldns_str2wire_dname(const char* str, size_t* len)
 	uint8_t dname[LDNS_MAX_DOMAINLEN+1];
 	*len = sizeof(dname);
 	if(sldns_str2wire_dname_buf(str, dname, len) == 0) {
-		uint8_t* r = (uint8_t*)malloc(*len);
+		uint8_t* r;
+		if(*len > sizeof(dname)) return NULL;
+		r = (uint8_t*)malloc(*len);
 		if(r) return memcpy(r, dname, *len);
 	}
 	*len = 0;
