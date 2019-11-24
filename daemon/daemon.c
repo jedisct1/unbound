@@ -250,8 +250,6 @@ daemon_init(void)
 	/* init timezone info while we are not chrooted yet */
 	tzset();
 #endif
-	/* open /dev/urandom if needed */
-	ub_systemseed((unsigned)time(NULL)^(unsigned)getpid()^0xe67);
 	daemon->need_to_exit = 0;
 	modstack_init(&daemon->mods);
 	if(!(daemon->env = (struct module_env*)calloc(1, 
@@ -429,9 +427,7 @@ daemon_create_workers(struct daemon* daemon)
 	int* shufport;
 	log_assert(daemon && daemon->cfg);
 	if(!daemon->rand) {
-		unsigned int seed = (unsigned int)time(NULL) ^ 
-			(unsigned int)getpid() ^ 0x438;
-		daemon->rand = ub_initstate(seed, NULL);
+		daemon->rand = ub_initstate(NULL);
 		if(!daemon->rand)
 			fatal_exit("could not init random generator");
 		hash_set_raninit((uint32_t)ub_random(daemon->rand));

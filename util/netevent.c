@@ -1128,7 +1128,7 @@ ssl_handshake(struct comm_point* c)
 			unsigned long err = ERR_get_error();
 			if(!squelch_err_ssl_handshake(err)) {
 				log_crypto_err_code("ssl handshake failed", err);
-				log_addr(1, "ssl handshake failed", &c->repinfo.addr,
+				log_addr(VERB_OPS, "ssl handshake failed", &c->repinfo.addr,
 					c->repinfo.addrlen);
 			}
 			return 0;
@@ -3191,7 +3191,7 @@ comm_point_drop_reply(struct comm_reply* repinfo)
 {
 	if(!repinfo)
 		return;
-	log_assert(repinfo && repinfo->c);
+	log_assert(repinfo->c);
 	log_assert(repinfo->c->type != comm_tcp_accept);
 	if(repinfo->c->type == comm_udp)
 		return;

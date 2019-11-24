@@ -1,3 +1,54 @@
+22 November 2019: George
+	- Fix compiler warnings.
+
+22 November 2019: Wouter
+	- Fix dname loop maximum, reported by Eric Sesterhenn from X41 D-Sec.
+	- Add make distclean that removes everything configure produced,
+	  and make maintainer-clean that removes bison and flex output.
+
+20 November 2019: Wouter
+	- Fix Out of Bounds Read in rrinternal_get_owner(),
+	  reported by X41 D-Sec.
+	- Fix Race Condition in autr_tp_create(),
+	  reported by X41 D-Sec.
+	- Fix Shared Memory World Writeable,
+	  reported by X41 D-Sec.
+	- Adjust unbound-control to make stats_shm a read only operation.
+	- Fix Weak Entropy Used For Nettle,
+	  reported by X41 D-Sec.
+	- Fix Randomness Error not Handled Properly,
+	  reported by X41 D-Sec.
+	- Fix Out-of-Bounds Read in dname_valid(),
+	  reported by X41 D-Sec.
+	- Fix Config Injection in create_unbound_ad_servers.sh,
+	  reported by X41 D-Sec.
+	- Fix Local Memory Leak in cachedb_init(),
+	  reported by X41 D-Sec.
+	- Fix Integer Underflow in Regional Allocator,
+	  reported by X41 D-Sec.
+	- Upgrade compat/getentropy_linux.c to version 1.46 from OpenBSD.
+	- Synchronize compat/getentropy_win.c with version 1.5 from
+	  OpenBSD, no changes but makes the file, comments, identical.
+	- Upgrade compat/getentropy_solaris.c to version 1.13 from OpenBSD.
+	- Upgrade compat/getentropy_osx.c to version 1.12 from OpenBSD.
+	- Changes to compat/getentropy files for,
+	  no link to openssl if using nettle, and hence config.h for
+	  HAVE_NETTLE variable.
+	  compat definition of MAP_ANON, for older systems.
+	  ifdef stdint.h inclusion for older systems.
+	  ifdef sha2.h inclusion for older systems.
+	- Fixed Compat Code Diverging from Upstream, reported by X41 D-Sec.
+	- Fix compile with --enable-alloc-checks, reported by X41 D-Sec.
+	- Fix Terminating Quotes not Written, reported by X41 D-Sec.
+	- Fix Useless memset() in validator, reported by X41 D-Sec.
+	- Fix Unrequired Checks, reported by X41 D-Sec.
+	- Fix Enum Name not Used, reported by X41 D-Sec.
+	- Fix NULL Pointer Dereference via Control Port,
+	  reported by X41 D-Sec.
+	- Fix Bad Randomness in Seed, reported by X41 D-Sec.
+	- Fix python examples/calc.py for eval, reported by X41 D-Sec.
+	- Fix comments for doxygen in dns64.
+
 19 November 2019: Wouter
 	- Fix CVE-2019-18934, shell execution in ipsecmod.
 	- 1.9.5 is 1.9.4 with bugfix, trunk is 1.9.6 in development.

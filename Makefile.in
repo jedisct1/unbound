@@ -160,6 +160,7 @@ SLDNS_SRC=sldns/keyraw.c sldns/sbuffer.c sldns/wire2str.c sldns/parse.c \
 sldns/parseutil.c sldns/rrdef.c sldns/str2wire.c
 SLDNS_OBJ=keyraw.lo sbuffer.lo wire2str.lo parse.lo parseutil.lo rrdef.lo \
 str2wire.lo
+SLDNS_ALLOCCHECK_EXTRA_OBJ=@SLDNS_ALLOCCHECK_EXTRA_OBJ@
 UNITTEST_SRC=testcode/unitanchor.c testcode/unitdname.c \
 testcode/unitlruhash.c testcode/unitmain.c testcode/unitmsgparse.c \
 testcode/unitneg.c testcode/unitregional.c testcode/unitslabhash.c \
@@ -187,11 +188,11 @@ CONTROL_OBJ_LINK=$(CONTROL_OBJ) worker_cb.lo $(COMMON_OBJ_ALL_SYMBOLS) \
 $(SLDNS_OBJ) $(COMPAT_OBJ) @WIN_CONTROL_OBJ_LINK@
 HOST_SRC=smallapp/unbound-host.c
 HOST_OBJ=unbound-host.lo
-HOST_OBJ_LINK=$(HOST_OBJ) $(SLDNS_OBJ) $(COMPAT_OBJ_WITHOUT_CTIMEARC4) @WIN_HOST_OBJ_LINK@
+HOST_OBJ_LINK=$(HOST_OBJ) $(SLDNS_OBJ) $(COMPAT_OBJ_WITHOUT_CTIMEARC4) $(SLDNS_ALLOCCHECK_EXTRA_OBJ) @WIN_HOST_OBJ_LINK@
 UBANCHOR_SRC=smallapp/unbound-anchor.c
 UBANCHOR_OBJ=unbound-anchor.lo
 UBANCHOR_OBJ_LINK=$(UBANCHOR_OBJ) parseutil.lo \
-$(COMPAT_OBJ_WITHOUT_CTIME) @WIN_UBANCHOR_OBJ_LINK@
+$(COMPAT_OBJ_WITHOUT_CTIME) $(SLDNS_ALLOCCHECK_EXTRA_OBJ) @WIN_UBANCHOR_OBJ_LINK@
 TESTBOUND_SRC=testcode/testbound.c testcode/testpkts.c \
 daemon/worker.c daemon/acl_list.c \
 daemon/daemon.c daemon/stats.c \
@@ -217,7 +218,7 @@ MEMSTATS_OBJ_LINK=$(MEMSTATS_OBJ) worker_cb.lo $(COMMON_OBJ) $(COMPAT_OBJ) \
 $(SLDNS_OBJ)
 ASYNCLOOK_SRC=testcode/asynclook.c
 ASYNCLOOK_OBJ=asynclook.lo
-ASYNCLOOK_OBJ_LINK=$(ASYNCLOOK_OBJ) log.lo locks.lo $(COMPAT_OBJ)
+ASYNCLOOK_OBJ_LINK=$(ASYNCLOOK_OBJ) log.lo locks.lo $(COMPAT_OBJ) @ASYNCLOOK_ALLOCCHECK_EXTRA_OBJ@
 STREAMTCP_SRC=testcode/streamtcp.c
 STREAMTCP_OBJ=streamtcp.lo
 STREAMTCP_OBJ_LINK=$(STREAMTCP_OBJ) worker_cb.lo $(COMMON_OBJ) $(COMPAT_OBJ) \
@@ -455,13 +456,18 @@ clean:
 	rm -f _unbound.la libunbound/python/libunbound_wrap.c libunbound/python/unbound.py pythonmod/interface.h pythonmod/unboundmodule.py
 	rm -rf autom4te.cache .libs build doc/html doc/xml
 
-realclean: clean
-	rm -f config.status config.log config.h.in config.h
-	rm -f configure config.sub config.guess ltmain.sh aclocal.m4 libtool
-	rm -f util/configlexer.c util/configparser.c util/configparser.h
-	rm -f doc/example.conf doc/libunbound.3 doc/unbound-anchor.8 doc/unbound-checkconf.8 doc/unbound-control.8 doc/unbound.8 doc/unbound.conf.5
+distclean: clean
+	rm -f config.status config.log config.h
+	rm -f doc/example.conf doc/libunbound.3 doc/unbound-anchor.8 doc/unbound-checkconf.8 doc/unbound-control.8 doc/unbound.8 doc/unbound.conf.5 doc/unbound-host.1
+	rm -f smallapp/unbound-control-setup.sh dnstap/dnstap_config.h dnscrypt/dnscrypt_config.h contrib/libunbound.pc contrib/unbound.socket contrib/unbound.service
 	rm -f $(TEST_BIN)
 	rm -f Makefile 
+
+maintainer-clean: distclean
+	rm -f util/configlexer.c util/configparser.c util/configparser.h
+
+realclean: maintainer-clean
+	rm -f configure config.h.in config.sub config.guess ltmain.sh aclocal.m4 libtool
 
 .SUFFIXES: .lint
 .c.lint:
