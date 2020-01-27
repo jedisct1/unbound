@@ -1,3 +1,60 @@
+27 January 2020: Ralph
+	- Merge PR#154; Allow use of libbsd functions with configure option
+	  --with-libbsd. By Robert Edmonds and Steven Chamberlain.
+	- Merge PR#148; Add some TLS stats to unbound_munin_. By Fredrik Pettai.
+
+27 January 2020: Wouter
+	- Merge PR#155 from Robert Edmonds: contrib/libunbound.pc.in: Fixes
+	  to Libs/Requires for crypto library dependencies.
+	- Fix #153: Disable validation for DSA algorithms.  RFC 8624
+	  compliance.
+
+23 January 2020: Wouter
+	- Merge PR#150 from Frzk: Systemd unit without chroot.  It add
+	  contrib/unbound_nochroot.service.in, a systemd file for use with
+	  chroot: "", see comments in the file, it uses systemd protections
+	  instead.
+
+14 January 2020: Wouter
+	- Removed the dnscrypt_queries and dnscrypt_queries_chacha tests,
+	  because dnscrypt-proxy (2.0.36) does not support the test setup
+	  any more, and also the config file format does not seem to have
+	  the appropriate keys to recreate that setup.
+	- Fix crash after reload where a stats lookup could reference old key
+	  cache and neg cache structures.
+	- Fix for memory leak when edns subnet config options are read when
+	  compiled without edns subnet support.
+	- Fix auth zone support for NSEC3 records without salt.
+
+10 January 2020: Wouter
+	- Fix the relationship between serve-expired and prefetch options,
+	  patch from Saksham Manchanda from Secure64.
+	- Fix unreachable code in ssl set options code.
+
+8 January 2020: Ralph
+	- Fix #138: stop binding pidfile inside chroot dir in systemd service
+	  file.
+
+8 January 2020: Wouter
+	- Fix 'make test' to work for --disable-sha1 configure option.
+	- Fix out-of-bounds null-byte write in sldns_bget_token_par while
+	  parsing type WKS, reported by Luis Merino from X41 D-Sec.
+	- Updated sldns_bget_token_par fix for also space for the zero
+	  delimiter after the character.  And update for more spare space.
+
+6 January 2020: George
+	- Downgrade compat/getentropy_solaris.c to version 1.4 from OpenBSD.
+	  The dl_iterate_phdr() function introduced in newer versions raises
+	  compilation errors on solaris 10.
+	- Changes to compat/getentropy_solaris.c for,
+	  ifdef stdint.h inclusion for older systems.
+	  ifdef sha2.h inclusion for older systems.
+
+6 January 2020: Wouter
+	- Merge #135 from Florian Obser: Use passed in neg and key cache
+	  if non-NULL.
+	- Fix #140: Document slave not downloading new zonefile upon update.
+
 16 December 2019: George
 	- Update mailing list URL.
 
