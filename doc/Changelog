@@ -1,3 +1,40 @@
+31 January 2020: Wouter
+	- Fix fclose on error in TLS session ticket code.
+
+30 January 2020: Ralph
+	- Fix memory leak in error condition remote.c
+	- Fix double free in error condition view.c
+	- Fix memory leak in do_auth_zone_transfer on success
+	- Merge RPZ support into master. Only QNAME and Response IP triggers are
+	  supported.
+	- Stop working on socket when socket() call returns an error.
+	- Check malloc return values in TLS session ticket code
+
+30 January 2020: Wouter
+	- Fix subnet tests for disabled DSA algorithm by default.
+	- Update contrib/fastrpz.patch for clean diff with current code.
+	- Merge PR#151: Fixes for systemd units, by Maryse47, Edmonds
+	  and Frzk.  Updates the unbound.service systemd file and adds
+	  a portable systemd service file.
+	- updated .gitignore for added contrib file.
+	- Add build rule for ipset to Makefile
+	- Add getentropy_freebsd.o to Makefile dependencies.
+
+29 January 2020: Ralph
+	- Merge PR#156 from Alexander Berkes; Added unbound-control
+	  view_local_datas_remove command.
+
+29 January 2020: Wouter
+	- Fix #157: undefined reference to `htobe64'.
+
+28 January 2020: Ralph
+	- Merge PR#147; change rfc reference for reserved top level dns names.
+
+28 January 2020: Wouter
+	- iana portlist updated.
+	- Fix to silence the tls handshake errors for broken pipe and reset
+	  by peer, unless verbosity is set to 2 or higher.
+
 27 January 2020: Ralph
 	- Merge PR#154; Allow use of libbsd functions with configure option
 	  --with-libbsd. By Robert Edmonds and Steven Chamberlain.

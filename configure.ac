@@ -1490,6 +1490,35 @@ AC_INCLUDES_DEFAULT
 #include <ws2tcpip.h>
 #endif
 ])
+
+AC_MSG_CHECKING([for htobe64])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([
+#include <stdio.h>
+#ifdef HAVE_ENDIAN_H
+#  include <endian.h>
+#endif
+#ifdef HAVE_SYS_ENDIAN_H
+#  include <sys/endian.h>
+#endif
+], [unsigned long long x = htobe64(0); printf("%u", (unsigned)x);])],
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(HAVE_HTOBE64, 1, [If we have htobe64]),
+  AC_MSG_RESULT(no))
+
+AC_MSG_CHECKING([for be64toh])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([
+#include <stdio.h>
+#ifdef HAVE_ENDIAN_H
+#  include <endian.h>
+#endif
+#ifdef HAVE_SYS_ENDIAN_H
+#  include <sys/endian.h>
+#endif
+], [unsigned long long x = be64toh(0); printf("%u", (unsigned)x);])],
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(HAVE_BE64TOH, 1, [If we have be64toh]),
+  AC_MSG_RESULT(no))
+
 AC_SEARCH_LIBS([setusercontext], [util])
 AC_CHECK_FUNCS([tzset sigprocmask fcntl getpwnam endpwent getrlimit setrlimit setsid chroot kill chown sleep usleep random srandom recvmsg sendmsg writev socketpair glob initgroups strftime localtime_r setusercontext _beginthreadex endservent endprotoent fsync shmget accept4])
 AC_CHECK_FUNCS([setresuid],,[AC_CHECK_FUNCS([setreuid])])
@@ -2074,6 +2103,6 @@ dnl if this is a distro tarball, that was already done by makedist.sh
 AC_SUBST(version, [VERSION_MAJOR.VERSION_MINOR.VERSION_MICRO])
 AC_SUBST(date, [`date +'%b %e, %Y'`])
 
-AC_CONFIG_FILES([Makefile doc/example.conf doc/libunbound.3 doc/unbound.8 doc/unbound-anchor.8 doc/unbound-checkconf.8 doc/unbound.conf.5 doc/unbound-control.8 doc/unbound-host.1 smallapp/unbound-control-setup.sh dnstap/dnstap_config.h dnscrypt/dnscrypt_config.h contrib/libunbound.pc contrib/unbound.socket contrib/unbound.service contrib/unbound_nochroot.service])
+AC_CONFIG_FILES([Makefile doc/example.conf doc/libunbound.3 doc/unbound.8 doc/unbound-anchor.8 doc/unbound-checkconf.8 doc/unbound.conf.5 doc/unbound-control.8 doc/unbound-host.1 smallapp/unbound-control-setup.sh dnstap/dnstap_config.h dnscrypt/dnscrypt_config.h contrib/libunbound.pc contrib/unbound.socket contrib/unbound.service contrib/unbound_portable.service])
 AC_CONFIG_HEADER([config.h])
 AC_OUTPUT
