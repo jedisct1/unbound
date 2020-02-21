@@ -204,8 +204,9 @@ struct ub_result {
 	char* why_bogus;
 
 	/**
-	 * If the query or one of its subqueries was ratelimited. Useful if
-	 * ratelimiting is enabled and answer is SERVFAIL.
+	 * If the query or one of its subqueries was ratelimited.  Useful if
+	 * ratelimiting is enabled and answer to the client is SERVFAIL as a
+	 * result.
 	 */
 	int was_ratelimited;
 
@@ -735,8 +736,8 @@ struct ub_server_stats {
 	long long unwanted_queries;
 	/** usage of tcp accept list */
 	long long tcp_accept_usage;
-	/** answers served from expired cache */
-	long long zero_ttl_responses;
+	/** expired answers served from cache */
+	long long ans_expired;
 	/** histogram data exported to array 
 	 * if the array is the same size, no data is lost, and
 	 * if all histograms are same size (is so by default) then

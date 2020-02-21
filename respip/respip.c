@@ -69,12 +69,24 @@ respip_set_create(void)
 	return set;
 }
 
+/** helper traverse to delete resp_addr nodes */
+static void
+resp_addr_del(rbnode_type* n, void* ATTR_UNUSED(arg))
+{
+	struct resp_addr* r = (struct resp_addr*)n->key;
+	lock_rw_destroy(&r->lock);
+#ifdef THREADS_DISABLED
+	(void)r;
+#endif
+}
+
 void
 respip_set_delete(struct respip_set* set)
 {
 	if(!set)
 		return;
 	lock_rw_destroy(&set->lock);
+	traverse_postorder(&set->ip_tree, resp_addr_del, NULL);
 	regional_destroy(set->region);
 	free(set);
 }
@@ -913,6 +925,8 @@ respip_rewrite_reply(const struct query_info* qinfo,
 	view = cinfo->view;
 	ipset = cinfo->respip_set;
 
+	log_assert(ipset);
+
 	/** Try to use response-ip config from the view first; use
 	  * global response-ip config if we don't have the view or we don't
 	  * have the matching per-view config (and the view allows the use
@@ -936,7 +950,7 @@ respip_rewrite_reply(const struct query_info* qinfo,
 		if(!raddr && !view->isfirst)
 			goto done;
 	}
-	if(!raddr && ipset && (raddr = respip_addr_lookup(rep, ipset,
+	if(!raddr && (raddr = respip_addr_lookup(rep, ipset,
 		&rrset_id))) {
 		action = (enum respip_action)local_data_find_tag_action(
 			raddr->taglist, raddr->taglen, ctaglist, ctaglen,
@@ -950,8 +964,6 @@ respip_rewrite_reply(const struct query_info* qinfo,
 			r->taglistlen, ctaglist, ctaglen)) {
 			if((raddr = respip_addr_lookup(rep,
 				r->respip_set, &rrset_id))) {
-			}
-			if(raddr) {
 				if(!respip_use_rpz(raddr, r, &action, &data,
 					&rpz_log, &log_name, &rpz_cname_override,
 					region, &rpz_used)) {
@@ -1017,8 +1029,9 @@ respip_rewrite_reply(const struct query_info* qinfo,
 			redirect_rrset, tag, ipset, search_only, region,
 				rpz_used, rpz_log, log_name, rpz_cname_override);
 	}
-	if(raddr)
+	if(raddr) {
 		lock_rw_unlock(&raddr->lock);
+	}
 	return ret;
 }
 
