@@ -186,6 +186,7 @@ config_create(void)
 	cfg->so_reuseport = REUSEPORT_DEFAULT;
 	cfg->ip_transparent = 0;
 	cfg->ip_freebind = 0;
+	cfg->ip_dscp = 0;
 	cfg->num_ifs = 0;
 	cfg->ifs = NULL;
 	cfg->num_out_ifs = 0;
@@ -336,6 +337,7 @@ config_create(void)
 	if(!(cfg->redis_server_host = strdup("127.0.0.1"))) goto error_exit;
 	cfg->redis_timeout = 100;
 	cfg->redis_server_port = 6379;
+	cfg->redis_expire_records = 0;
 #endif  /* USE_REDIS */
 #endif  /* USE_CACHEDB */
 #ifdef USE_IPSET
@@ -524,6 +526,7 @@ int config_set_option(struct config_file* cfg, const char* opt,
 	else S_YNO("so-reuseport:", so_reuseport)
 	else S_YNO("ip-transparent:", ip_transparent)
 	else S_YNO("ip-freebind:", ip_freebind)
+	else S_NUMBER_OR_ZERO("ip-dscp:", ip_dscp)
 	else S_MEMSIZE("rrset-cache-size:", rrset_cache_size)
 	else S_POW2("rrset-cache-slabs:", rrset_cache_slabs)
 	else S_YNO("prefetch:", prefetch)
@@ -923,6 +926,7 @@ config_get_option(struct config_file* cfg, const char* opt,
 	else O_YNO(opt, "so-reuseport", so_reuseport)
 	else O_YNO(opt, "ip-transparent", ip_transparent)
 	else O_YNO(opt, "ip-freebind", ip_freebind)
+	else O_DEC(opt, "ip-dscp", ip_dscp)
 	else O_MEM(opt, "rrset-cache-size", rrset_cache_size)
 	else O_DEC(opt, "rrset-cache-slabs", rrset_cache_slabs)
 	else O_YNO(opt, "prefetch-key", prefetch_key)
@@ -1132,6 +1136,7 @@ config_get_option(struct config_file* cfg, const char* opt,
 	else O_STR(opt, "redis-server-host", redis_server_host)
 	else O_DEC(opt, "redis-server-port", redis_server_port)
 	else O_DEC(opt, "redis-timeout", redis_timeout)
+	else O_YNO(opt, "redis-expire-records", redis_expire_records)
 #endif  /* USE_REDIS */
 #endif  /* USE_CACHEDB */
 #ifdef USE_IPSET

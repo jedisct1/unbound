@@ -119,6 +119,11 @@ server:
 	# Linux only.  On Linux you also have ip-transparent that is similar.
 	# ip-freebind: no
 
+	# the value of the Differentiated Services Codepoint (DSCP)
+	# in the differentiated services field (DS) of the outgoing
+	# IP packets
+	# ip-dscp: 0
+
 	# EDNS reassembly buffer to advertise to UDP peers (the actual buffer
 	# is set with msg-buffer-size). 1472 can solve fragmentation (timeouts)
 	# edns-buffer-size: 4096
@@ -1008,10 +1013,12 @@ remote-control:
 #     redis-server-port: 6379
 #     # timeout (in ms) for communication with the redis server
 #     redis-timeout: 100
+#     # set timeout on redis records based on DNS response TTL
+#     redis-expire-records: no
 
 # IPSet
 # Add specify domain into set via ipset.
-# Note: To enable ipset needs run unbound as root user.
+# Note: To enable ipset unbound needs to run as root user.
 # ipset:
 #     # set name for ip v4 addresses
 #     name-v4: "list-v4"

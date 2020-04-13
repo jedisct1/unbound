@@ -1,3 +1,47 @@
+7 April 2020: Wouter
+	- Merge PR #214 from gearnode: unbound-control-setup recreate
+	  certificates.  With the -r option the certificates are created
+	  again, without it, only the files that do not exist are created.
+
+6 April 2020: Ralph
+	- Keep track of number of timeouts. Use this counter to determine if
+	  capsforid fallback should be started.
+
+6 April 2020: George
+	- More documentation for redis-expire-records option.
+
+1 April 2020: George
+	- Merge PR #206: Redis TTL, by Talkabout.
+
+30 March 2020: Wouter
+	- Merge PR #207: Clarify if-automatic listens on 0.0.0.0 and ::
+	- Merge PR #208: Fix uncached CLIENT_RESPONSE'es on stateful
+	  transports.
+
+27 March 2020: Wouter
+	- Merge PR #203 from noloader: Update README-Travis.md with current
+	  procedures.
+
+27 March 2020: Ralph
+	- Make unbound-control error returned on missing domain name more user
+	  friendly.
+
+26 March 2020: Ralph
+	- Fix RPZ concurrency issue when using auth_zone_reload.
+
+25 March 2020: George
+	- Merge PR #201 from noloader: Fix OpenSSL cross-compaile warnings.
+	- Fix on #201.
+
+24 March 2020: Wouter
+	- Merge PR #200 from yarikk: add ip-dscp option to specify the DSCP
+	  tag for outgoing packets.
+	- Fixes on #200.
+	- Travis fix for ios by omitting tools from install.
+
+23 March 2020: Wouter
+	- Fix compile on Solaris for unbound-checkconf.
+
 20 March 2020: George
 	- Merge PR #198 from fobser: Declare lz_enter_rr_into_zone() static, it's
 	  only used in this file.
