@@ -1,3 +1,22 @@
+20 April 2020: Wouter
+	- Fix #222: --enable-rpath, fails to rpath python lib.
+	- Fix for count of reply states in the mesh.
+
+17 April 2020: George
+	- Add SNI support on more TLS connections (fixes #193).
+	- Add SNI support to unbound-anchor.
+
+16 April 2020: George
+	- Add doxygen documentation for DSCP.
+
+16 April 2020: Wouter
+	- Fix help return code in unbound-control-setup script.
+	- Fix for posix shell syntax for trap in nsd-control-setup.
+	- Fix for posix shell syntax for trap in run_msg.sh test script.
+
+15 April 2020: George
+	- Fix #220: auth-zone section in config may lead to segfault.
+
 7 April 2020: Wouter
 	- Merge PR #214 from gearnode: unbound-control-setup recreate
 	  certificates.  With the -r option the certificates are created
