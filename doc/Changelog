@@ -1,6 +1,20 @@
+22 April 2020: George
+	- Explicitly use 'rrset-roundrobin: no' for test cases.
+
+21 April 2020: Wouter
+	- Merge #225 from akhait: KSK-2010 has been revoked. It removes the
+	  KSK-2010 from the default list in unbound-anchor, now that the
+	  revocation period is over.  KSK-2017 is the only trust anchor in
+	  the shipped default now.
+
+21 April 2020: George
+	- Change default value for 'rrset-roundrobin' to yes.
+	- Fix tests for new rrset-roundrobin default.
+
 20 April 2020: Wouter
 	- Fix #222: --enable-rpath, fails to rpath python lib.
 	- Fix for count of reply states in the mesh.
+	- Remove unneeded was_mesh_reply check.
 
 17 April 2020: George
 	- Add SNI support on more TLS connections (fixes #193).
