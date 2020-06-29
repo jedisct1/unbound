@@ -1,3 +1,15 @@
+24 June 2020: Wouter
+	- iana portlist updated.
+	- doxygen file comments for dynlibmodule.
+
+17 June 2020: Wouter
+	- Fix default explanation in man page for qname-minimisation-strict.
+	- Fix display of event loop method with libev.
+
+8 June 2020: Wouter
+	- Mention tls name possible when tls is enabled for stub-addr in the
+	  man page.
+
 27 May 2020: George
 	- Merge PR #241 by Robert Edmonds: contrib/libunbound.pc.in: Do not use
 	  "Requires:".
