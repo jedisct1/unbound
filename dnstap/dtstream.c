@@ -149,15 +149,14 @@ static void dtio_wakeup(struct dt_io_thread* dtio)
 #ifndef USE_WINSOCK
 			if(errno == EINTR || errno == EAGAIN)
 				continue;
-			log_err("dnstap io wakeup: write: %s", strerror(errno));
 #else
 			if(WSAGetLastError() == WSAEINPROGRESS)
 				continue;
 			if(WSAGetLastError() == WSAEWOULDBLOCK)
 				continue;
-			log_err("dnstap io stop: write: %s",
-				wsa_strerror(WSAGetLastError()));
 #endif
+			log_err("dnstap io wakeup: write: %s",
+				sock_strerror(errno));
 			break;
 		}
 		break;
@@ -279,7 +278,8 @@ int dt_io_thread_apply_cfg(struct dt_io_thread* dtio, struct config_file *cfg)
 			return 0;
 		}
 		free(dtio->socket_path);
-		dtio->socket_path = strdup(cfg->dnstap_socket_path);
+		dtio->socket_path = fname_after_chroot(cfg->dnstap_socket_path,
+			cfg, 1);
 		if(!dtio->socket_path) {
 			log_err("dnstap setup: malloc failure");
 			return 0;
@@ -587,11 +587,7 @@ static void dtio_del_output_event(struct dt_io_thread* dtio)
 /** close dtio socket and set it to -1 */
 static void dtio_close_fd(struct dt_io_thread* dtio)
 {
-#ifndef USE_WINSOCK
-	close(dtio->fd);
-#else
-	closesocket(dtio->fd);
-#endif
+	sock_close(dtio->fd);
 	dtio->fd = -1;
 }
 
@@ -659,13 +655,8 @@ static int dtio_check_nb_connect(struct dt_io_thread* dtio)
 		char* to = dtio->socket_path;
 		if(!to) to = dtio->ip_str;
 		if(!to) to = "";
-#ifndef USE_WINSOCK
 		log_err("dnstap io: failed to connect to \"%s\": %s",
-			to, strerror(error));
-#else
-		log_err("dnstap io: failed to connect to \"%s\": %s",
-			to, wsa_strerror(error));
-#endif
+			to, sock_strerror(error));
 		return -1; /* error, close it */
 	}
 
@@ -742,7 +733,6 @@ static int dtio_write_buf(struct dt_io_thread* dtio, uint8_t* buf,
 #ifndef USE_WINSOCK
 		if(errno == EINTR || errno == EAGAIN)
 			return 0;
-		log_err("dnstap io: failed send: %s", strerror(errno));
 #else
 		if(WSAGetLastError() == WSAEINPROGRESS)
 			return 0;
@@ -752,9 +742,8 @@ static int dtio_write_buf(struct dt_io_thread* dtio, uint8_t* buf,
 				UB_EV_WRITE);
 			return 0;
 		}
-		log_err("dnstap io: failed send: %s",
-			wsa_strerror(WSAGetLastError()));
 #endif
+		log_err("dnstap io: failed send: %s", sock_strerror(errno));
 		return -1;
 	}
 	return ret;
@@ -778,7 +767,6 @@ static int dtio_write_with_writev(struct dt_io_thread* dtio)
 #ifndef USE_WINSOCK
 		if(errno == EINTR || errno == EAGAIN)
 			return 0;
-		log_err("dnstap io: failed writev: %s", strerror(errno));
 #else
 		if(WSAGetLastError() == WSAEINPROGRESS)
 			return 0;
@@ -788,9 +776,8 @@ static int dtio_write_with_writev(struct dt_io_thread* dtio)
 				UB_EV_WRITE);
 			return 0;
 		}
-		log_err("dnstap io: failed writev: %s",
-			wsa_strerror(WSAGetLastError()));
 #endif
+		log_err("dnstap io: failed writev: %s", sock_strerror(errno));
 		/* close the channel */
 		dtio_del_output_event(dtio);
 		dtio_close_output(dtio);
@@ -1482,15 +1469,13 @@ void dtio_cmd_cb(int fd, short ATTR_UNUSED(bits), void* arg)
 #ifndef USE_WINSOCK
 		if(errno == EINTR || errno == EAGAIN)
 			return; /* ignore this */
-		log_err("dnstap io: failed to read: %s", strerror(errno));
 #else
 		if(WSAGetLastError() == WSAEINPROGRESS)
 			return;
 		if(WSAGetLastError() == WSAEWOULDBLOCK)
 			return;
-		log_err("dnstap io: failed to read: %s",
-			wsa_strerror(WSAGetLastError()));
 #endif
+		log_err("dnstap io: failed to read: %s", sock_strerror(errno));
 		/* and then fall through to quit the thread */
 	} else if(r == 0) {
 		verbose(VERB_ALGO, "dnstap io: cmd channel closed");
@@ -1852,13 +1837,8 @@ static int dtio_open_output_local(struct dt_io_thread* dtio)
 	struct sockaddr_un s;
 	dtio->fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if(dtio->fd == -1) {
-#ifndef USE_WINSOCK
 		log_err("dnstap io: failed to create socket: %s",
-			strerror(errno));
-#else
-		log_err("dnstap io: failed to create socket: %s",
-			wsa_strerror(WSAGetLastError()));
-#endif
+			sock_strerror(errno));
 		return 0;
 	}
 	memset(&s, 0, sizeof(s));
@@ -1873,13 +1853,13 @@ static int dtio_open_output_local(struct dt_io_thread* dtio)
 	if(connect(dtio->fd, (struct sockaddr*)&s, (socklen_t)sizeof(s))
 		== -1) {
 		char* to = dtio->socket_path;
-#ifndef USE_WINSOCK
+		if(dtio->reconnect_timeout > DTIO_RECONNECT_TIMEOUT_MIN &&
+			verbosity < 4) {
+			dtio_close_fd(dtio);
+			return 0; /* no log retries on low verbosity */
+		}
 		log_err("dnstap io: failed to connect to \"%s\": %s",
-			to, strerror(errno));
-#else
-		log_err("dnstap io: failed to connect to \"%s\": %s",
-			to, wsa_strerror(WSAGetLastError()));
-#endif
+			to, sock_strerror(errno));
 		dtio_close_fd(dtio);
 		return 0;
 	}
@@ -1904,18 +1884,18 @@ static int dtio_open_output_tcp(struct dt_io_thread* dtio)
 	}
 	dtio->fd = socket(addr.ss_family, SOCK_STREAM, 0);
 	if(dtio->fd == -1) {
-#ifndef USE_WINSOCK
-		log_err("can't create socket: %s", strerror(errno));
-#else
-		log_err("can't create socket: %s",
-			wsa_strerror(WSAGetLastError()));
-#endif
+		log_err("can't create socket: %s", sock_strerror(errno));
 		return 0;
 	}
 	fd_set_nonblock(dtio->fd);
 	if(connect(dtio->fd, (struct sockaddr*)&addr, addrlen) == -1) {
 		if(errno == EINPROGRESS)
 			return 1; /* wait until connect done*/
+		if(dtio->reconnect_timeout > DTIO_RECONNECT_TIMEOUT_MIN &&
+			verbosity < 4) {
+			dtio_close_fd(dtio);
+			return 0; /* no log retries on low verbosity */
+		}
 #ifndef USE_WINSOCK
 		if(tcp_connect_errno_needs_log(
 			(struct sockaddr *)&addr, addrlen)) {
@@ -2097,15 +2077,14 @@ void dt_io_thread_stop(struct dt_io_thread* dtio)
 #ifndef USE_WINSOCK
 			if(errno == EINTR || errno == EAGAIN)
 				continue;
-			log_err("dnstap io stop: write: %s", strerror(errno));
 #else
 			if(WSAGetLastError() == WSAEINPROGRESS)
 				continue;
 			if(WSAGetLastError() == WSAEWOULDBLOCK)
 				continue;
-			log_err("dnstap io stop: write: %s",
-				wsa_strerror(WSAGetLastError()));
 #endif
+			log_err("dnstap io stop: write: %s",
+				sock_strerror(errno));
 			break;
 		}
 		break;

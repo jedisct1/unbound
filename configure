@@ -14726,7 +14726,7 @@ $as_echo "no" >&6; }
 fi
 
 # Checks for header files.
-for ac_header in stdarg.h stdbool.h netinet/in.h netinet/tcp.h sys/param.h sys/socket.h sys/un.h sys/uio.h sys/resource.h arpa/inet.h syslog.h netdb.h sys/wait.h pwd.h glob.h grp.h login_cap.h winsock2.h ws2tcpip.h endian.h sys/endian.h libkern/OSByteOrder.h sys/ipc.h sys/shm.h
+for ac_header in stdarg.h stdbool.h netinet/in.h netinet/tcp.h sys/param.h sys/select.h sys/socket.h sys/un.h sys/uio.h sys/resource.h arpa/inet.h syslog.h netdb.h sys/wait.h pwd.h glob.h grp.h login_cap.h winsock2.h ws2tcpip.h endian.h sys/endian.h libkern/OSByteOrder.h sys/ipc.h sys/shm.h ifaddrs.h net/if.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
 ac_fn_c_check_header_compile "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default
@@ -17943,8 +17943,8 @@ $as_echo "found in $ssldir" >&6; }
 
             fi
 
-            { $as_echo "$as_me:${as_lineno-$LINENO}: checking for HMAC_Update in -lcrypto" >&5
-$as_echo_n "checking for HMAC_Update in -lcrypto... " >&6; }
+            { $as_echo "$as_me:${as_lineno-$LINENO}: checking for EVP_sha256 in -lcrypto" >&5
+$as_echo_n "checking for EVP_sha256 in -lcrypto... " >&6; }
             LIBS="$LIBS -lcrypto"
             LIBSSL_LIBS="$LIBSSL_LIBS -lcrypto"
             cat confdefs.h - <<_ACEOF >conftest.$ac_ext
@@ -17954,8 +17954,8 @@ int
 main ()
 {
 
-                int HMAC_Update(void);
-                (void)HMAC_Update();
+                int EVP_sha256(void);
+                (void)EVP_sha256();
 
   ;
   return 0;
@@ -17966,7 +17966,7 @@ if ac_fn_c_try_link "$LINENO"; then :
                 { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
 
-$as_echo "#define HAVE_HMAC_UPDATE 1" >>confdefs.h
+$as_echo "#define HAVE_EVP_SHA256 1" >>confdefs.h
 
 
 else
@@ -17987,8 +17987,8 @@ int
 main ()
 {
 
-                    int HMAC_Update(void);
-                    (void)HMAC_Update();
+                    int EVP_sha256(void);
+                    (void)EVP_sha256();
 
   ;
   return 0;
@@ -17997,7 +17997,7 @@ _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
 
 
-$as_echo "#define HAVE_HMAC_UPDATE 1" >>confdefs.h
+$as_echo "#define HAVE_EVP_SHA256 1" >>confdefs.h
 
                     { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
@@ -18019,8 +18019,8 @@ int
 main ()
 {
 
-                        int HMAC_Update(void);
-                        (void)HMAC_Update();
+                        int EVP_sha256(void);
+                        (void)EVP_sha256();
 
   ;
   return 0;
@@ -18029,7 +18029,7 @@ _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
 
 
-$as_echo "#define HAVE_HMAC_UPDATE 1" >>confdefs.h
+$as_echo "#define HAVE_EVP_SHA256 1" >>confdefs.h
 
                         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
@@ -18051,8 +18051,8 @@ int
 main ()
 {
 
-                            int HMAC_Update(void);
-                            (void)HMAC_Update();
+                            int EVP_sha256(void);
+                            (void)EVP_sha256();
 
   ;
   return 0;
@@ -18061,7 +18061,7 @@ _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
 
 
-$as_echo "#define HAVE_HMAC_UPDATE 1" >>confdefs.h
+$as_echo "#define HAVE_EVP_SHA256 1" >>confdefs.h
 
                             { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
@@ -18246,11 +18246,11 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 #ifdef __cplusplus
 extern "C"
 #endif
-char HMAC_Update ();
+char EVP_sha256 ();
 int
 main ()
 {
-return HMAC_Update ();
+return EVP_sha256 ();
   ;
   return 0;
 }
@@ -18341,7 +18341,7 @@ fi
 
 done
 
-for ac_func in OPENSSL_config EVP_sha1 EVP_sha256 EVP_sha512 FIPS_mode EVP_MD_CTX_new OpenSSL_add_all_digests OPENSSL_init_crypto EVP_cleanup ENGINE_cleanup ERR_load_crypto_strings CRYPTO_cleanup_all_ex_data ERR_free_strings RAND_cleanup DSA_SIG_set0 EVP_dss1 EVP_DigestVerify EVP_aes_256_cbc EVP_EncryptInit_ex HMAC_Init_ex CRYPTO_THREADID_set_callback
+for ac_func in OPENSSL_config EVP_sha1 EVP_sha256 EVP_sha512 FIPS_mode EVP_MD_CTX_new OpenSSL_add_all_digests OPENSSL_init_crypto EVP_cleanup ENGINE_cleanup ERR_load_crypto_strings CRYPTO_cleanup_all_ex_data ERR_free_strings RAND_cleanup DSA_SIG_set0 EVP_dss1 EVP_DigestVerify EVP_aes_256_cbc EVP_EncryptInit_ex HMAC_Init_ex CRYPTO_THREADID_set_callback EVP_MAC_CTX_set_params
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
@@ -20224,7 +20224,7 @@ if test "$ac_res" != no; then :
 
 fi
 
-for ac_func in tzset sigprocmask fcntl getpwnam endpwent getrlimit setrlimit setsid chroot kill chown sleep usleep random srandom recvmsg sendmsg writev socketpair glob initgroups strftime localtime_r setusercontext _beginthreadex endservent endprotoent fsync shmget accept4
+for ac_func in tzset sigprocmask fcntl getpwnam endpwent getrlimit setrlimit setsid chroot kill chown sleep usleep random srandom recvmsg sendmsg writev socketpair glob initgroups strftime localtime_r setusercontext _beginthreadex endservent endprotoent fsync shmget accept4 getifaddrs
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"

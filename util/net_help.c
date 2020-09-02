@@ -82,6 +82,7 @@ static struct tls_session_ticket_key {
 	unsigned char *hmac_key;
 } *ticket_keys;
 
+#ifdef HAVE_SSL
 /**
  * callback TLS session ticket encrypt and decrypt
  * For use with SSL_CTX_set_tlsext_ticket_key_cb or
@@ -97,7 +98,6 @@ static struct tls_session_ticket_key {
  * @return 0 on no ticket, 1 for okay, and 2 for okay but renew the ticket
  * 	(the ticket is decrypt only). and <0 for failures.
  */
-#ifdef HAVE_SSL
 int tls_session_ticket_key_cb(SSL *s, unsigned char* key_name,
 	unsigned char* iv, EVP_CIPHER_CTX *evp_ctx,
 #ifdef HAVE_SSL_CTX_SET_TLSEXT_TICKET_KEY_EVP_CB
@@ -1478,7 +1478,11 @@ int tls_session_ticket_key_cb(SSL *ATTR_UNUSED(sslctx), unsigned char* key_name,
 		params[1] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
 			"sha256", 0);
 		params[2] = OSSL_PARAM_construct_end();
+#ifdef HAVE_EVP_MAC_CTX_SET_PARAMS
+		EVP_MAC_CTX_set_params(hmac_ctx, params);
+#else
 		EVP_MAC_set_ctx_params(hmac_ctx, params);
+#endif
 #elif !defined(HMAC_INIT_EX_RETURNS_VOID)
 		if (HMAC_Init_ex(hmac_ctx, ticket_keys->hmac_key, 32, digest, NULL) != 1) {
 			verbose(VERB_CLIENT, "HMAC_Init_ex failed");
@@ -1509,7 +1513,11 @@ int tls_session_ticket_key_cb(SSL *ATTR_UNUSED(sslctx), unsigned char* key_name,
 		params[1] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
 			"sha256", 0);
 		params[2] = OSSL_PARAM_construct_end();
+#ifdef HAVE_EVP_MAC_CTX_SET_PARAMS
+		EVP_MAC_CTX_set_params(hmac_ctx, params);
+#else
 		EVP_MAC_set_ctx_params(hmac_ctx, params);
+#endif
 #elif !defined(HMAC_INIT_EX_RETURNS_VOID)
 		if (HMAC_Init_ex(hmac_ctx, key->hmac_key, 32, digest, NULL) != 1) {
 			verbose(VERB_CLIENT, "HMAC_Init_ex failed");
@@ -1554,3 +1562,31 @@ listen_sslctx_delete_ticket_keys(void)
 	free(ticket_keys);
 	ticket_keys = NULL;
 }
+
+#  ifndef USE_WINSOCK
+char*
+sock_strerror(int errn)
+{
+	return strerror(errn);
+}
+
+void
+sock_close(int socket)
+{
+	close(socket);
+}
+
+#  else
+char*
+sock_strerror(int ATTR_UNUSED(errn))
+{
+	return wsa_strerror(WSAGetLastError());
+}
+
+void
+sock_close(int socket)
+{
+	closesocket(socket);
+}
+
+#  endif /* USE_WINSOCK */
