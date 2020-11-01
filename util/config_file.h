@@ -131,6 +131,21 @@ struct config_file {
 	/** if SNI is to be used */
 	int tls_use_sni;
 
+	/** port on which to provide DNS over HTTPS service */
+	int https_port;
+	/** endpoint for HTTP service */
+	char* http_endpoint;
+	/** MAX_CONCURRENT_STREAMS HTTP/2 setting */
+	uint32_t http_max_streams;
+	/** maximum size of all HTTP2 query buffers combined. */
+	size_t http_query_buffer_size;
+	/** maximum size of all HTTP2 response buffers combined. */
+	size_t http_response_buffer_size;
+	/** set TCP_NODELAY option for http sockets */
+	int http_nodelay;
+	/** Disable TLS for http sockets downstream */
+	int http_notls_downstream;
+
 	/** outgoing port range number of ports (per thread) */
 	int outgoing_num_ports;
 	/** number of outgoing tcp buffers per (per thread) */
@@ -166,6 +181,8 @@ struct config_file {
 	size_t infra_cache_numhosts;
 	/** min value for infra cache rtt */
 	int infra_cache_min_rtt;
+	/** keep probing hosts that are down */
+	int infra_keep_probing;
 	/** delay close of udp-timeouted ports, if 0 no delayclose. in msec */
 	int delay_close;
 
@@ -551,6 +568,8 @@ struct config_file {
 
 	/** list of EDNS client tag entries, linked list */
 	struct config_str2list* edns_client_tags;
+	/** EDNS opcode to use for EDNS client tags */
+	uint16_t edns_client_tag_opcode;
 
 	/** DNSCrypt */
 	/** true to enable dnscrypt */
@@ -624,6 +643,10 @@ extern gid_t cfg_gid;
 extern int autr_permit_small_holddown;
 /** size (in bytes) of stream wait buffers max */
 extern size_t stream_wait_max;
+/** size (in bytes) of all total HTTP2 query buffers max */
+extern size_t http2_query_buffer_max;
+/** size (in bytes) of all total HTTP2 response buffers max */
+extern size_t http2_response_buffer_max;
 
 /**
  * Stub config options

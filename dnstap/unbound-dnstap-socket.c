@@ -1167,8 +1167,10 @@ int sig_quit = 0;
 static RETSIGTYPE main_sigh(int sig)
 {
 	verbose(VERB_ALGO, "exit on signal %d\n", sig);
-	if(sig_base)
+	if(sig_base) {
 		ub_event_base_loopexit(sig_base);
+		sig_base = NULL;
+	}
 	sig_quit = 1;
 }
 
@@ -1209,9 +1211,9 @@ setup_and_run(struct config_strlist_head* local_list,
 	if(verbosity) log_info("start of service");
 
 	ub_event_base_dispatch(base);
+	sig_base = NULL;
 
 	if(verbosity) log_info("end of service");
-	sig_base = NULL;
 	tap_socket_list_delete(maindata->acceptlist);
 	ub_event_base_free(base);
 	free(maindata);

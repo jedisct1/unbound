@@ -10,7 +10,7 @@ sinclude(dnscrypt/dnscrypt.m4)
 
 # must be numbers. ac_defun because of later processing
 m4_define([VERSION_MAJOR],[1])
-m4_define([VERSION_MINOR],[11])
+m4_define([VERSION_MINOR],[12])
 m4_define([VERSION_MICRO],[1])
 AC_INIT(unbound, m4_defn([VERSION_MAJOR]).m4_defn([VERSION_MINOR]).m4_defn([VERSION_MICRO]), unbound-bugs@nlnetlabs.nl or https://github.com/NLnetLabs/unbound/issues, unbound)
 AC_SUBST(UNBOUND_VERSION_MAJOR, [VERSION_MAJOR])
@@ -18,7 +18,7 @@ AC_SUBST(UNBOUND_VERSION_MINOR, [VERSION_MINOR])
 AC_SUBST(UNBOUND_VERSION_MICRO, [VERSION_MICRO])
 
 LIBUNBOUND_CURRENT=9
-LIBUNBOUND_REVISION=10
+LIBUNBOUND_REVISION=11
 LIBUNBOUND_AGE=1
 # 1.0.0 had 0:12:0
 # 1.0.1 had 0:13:0
@@ -95,7 +95,8 @@ LIBUNBOUND_AGE=1
 # 1.10.0 had 9:7:1
 # 1.10.1 had 9:8:1
 # 1.11.0 had 9:9:1
-# 1.11.1 had 9:10:1
+# 1.12.0 had 9:10:1
+# 1.12.1 had 9:11:1
 
 #   Current  -- the number of the binary API that we're implementing
 #   Revision -- which iteration of the implementation of the binary
@@ -399,7 +400,23 @@ ACX_LIBTOOL_C_ONLY
 PKG_PROG_PKG_CONFIG
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdarg.h stdbool.h netinet/in.h netinet/tcp.h sys/param.h sys/select.h sys/socket.h sys/un.h sys/uio.h sys/resource.h arpa/inet.h syslog.h netdb.h sys/wait.h pwd.h glob.h grp.h login_cap.h winsock2.h ws2tcpip.h endian.h sys/endian.h libkern/OSByteOrder.h sys/ipc.h sys/shm.h ifaddrs.h net/if.h],,, [AC_INCLUDES_DEFAULT])
+AC_CHECK_HEADERS([stdarg.h stdbool.h netinet/in.h netinet/tcp.h sys/param.h sys/select.h sys/socket.h sys/un.h sys/uio.h sys/resource.h arpa/inet.h syslog.h netdb.h sys/wait.h pwd.h glob.h grp.h login_cap.h winsock2.h ws2tcpip.h endian.h sys/endian.h libkern/OSByteOrder.h sys/ipc.h sys/shm.h ifaddrs.h],,, [AC_INCLUDES_DEFAULT])
+# net/if.h portability for Darwin see:
+# https://www.gnu.org/software/autoconf/manual/autoconf-2.69/html_node/Header-Portability.html
+AC_CHECK_HEADERS([net/if.h],,, [
+#include <stdio.h>
+#ifdef STDC_HEADERS
+# include <stdlib.h>
+# include <stddef.h>
+#else
+# ifdef HAVE_STDLIB_H
+#  include <stdlib.h>
+# endif
+#endif
+#ifdef HAVE_SYS_SOCKET_H
+# include <sys/socket.h>
+#endif
+])
 
 # Check for Apple header. This uncovers TARGET_OS_IPHONE, TARGET_OS_TV or TARGET_OS_WATCH
 AC_CHECK_HEADERS([TargetConditionals.h])
@@ -857,7 +874,7 @@ AC_CHECK_FUNCS([OPENSSL_config EVP_sha1 EVP_sha256 EVP_sha512 FIPS_mode EVP_MD_C
 # these check_funcs need -lssl
 BAKLIBS="$LIBS"
 LIBS="-lssl $LIBS"
-AC_CHECK_FUNCS([OPENSSL_init_ssl SSL_CTX_set_security_level SSL_set1_host SSL_get0_peername X509_VERIFY_PARAM_set1_host SSL_CTX_set_ciphersuites SSL_CTX_set_tlsext_ticket_key_evp_cb])
+AC_CHECK_FUNCS([OPENSSL_init_ssl SSL_CTX_set_security_level SSL_set1_host SSL_get0_peername X509_VERIFY_PARAM_set1_host SSL_CTX_set_ciphersuites SSL_CTX_set_tlsext_ticket_key_evp_cb SSL_CTX_set_alpn_select_cb])
 LIBS="$BAKLIBS"
 
 AC_CHECK_DECLS([SSL_COMP_get_compression_methods,sk_SSL_COMP_pop_free,SSL_CTX_set_ecdh_auto], [], [], [
@@ -1393,6 +1410,39 @@ if test x_$withval = x_yes -o x_$withval != x_no; then
     AC_CHECK_HEADERS([hiredis/hiredis.h],,, [AC_INCLUDES_DEFAULT])
     AC_CHECK_DECLS([redisConnect], [], [], [AC_INCLUDES_DEFAULT
     #include <hiredis/hiredis.h>
+    ])
+fi
+
+# nghttp2
+AC_ARG_WITH(libnghttp2, AC_HELP_STRING([--with-libnghttp2=path],
+    [specify explicit path for libnghttp2.]),
+    [ ],[ withval="no" ])
+found_libnghttp2="no"
+if test x_$withval = x_yes -o x_$withval != x_no; then
+   AC_MSG_CHECKING(for libnghttp2)
+   if test x_$withval = x_ -o x_$withval = x_yes; then
+            withval="/usr/local /opt/local /usr/lib /usr/pkg /usr/sfw /usr"
+   fi
+   for dir in $withval ; do
+            if test -f "$dir/include/nghttp2/nghttp2.h"; then
+		found_libnghttp2="yes"
+		dnl assume /usr is in default path.
+		if test "$dir" != "/usr"; then
+                    CPPFLAGS="$CPPFLAGS -I$dir/include"
+		    LDFLAGS="$LDFLAGS -L$dir/lib"
+		fi
+		AC_MSG_RESULT(found in $dir)
+		AC_DEFINE([HAVE_NGHTTP2], [1], [Define this to use nghttp2 client.])
+		LIBS="$LIBS -lnghttp2"
+                break;
+            fi
+    done
+    if test x_$found_libnghttp2 != x_yes; then
+	AC_ERROR([Could not find libnghttp2, nghttp2.h])
+    fi
+    AC_CHECK_HEADERS([nghttp2/nghttp2.h],,, [AC_INCLUDES_DEFAULT])
+    AC_CHECK_DECLS([nghttp2_session_server_new], [], [], [AC_INCLUDES_DEFAULT
+    #include <nghttp2/nghttp2.h>
     ])
 fi
 
@@ -2132,6 +2182,8 @@ void *unbound_stat_realloc_log(void *ptr, size_t size, const char* file,
 #define UNBOUND_DNS_PORT 53
 /** default port for DNS over TLS traffic. */
 #define UNBOUND_DNS_OVER_TLS_PORT 853
+/** default port for DNS over HTTPS traffic. */
+#define UNBOUND_DNS_OVER_HTTPS_PORT 443
 /** default port for unbound control traffic, registered port with IANA,
     ub-dns-control  8953/tcp    unbound dns nameserver control */
 #define UNBOUND_CONTROL_PORT 8953

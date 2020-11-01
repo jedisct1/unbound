@@ -1109,7 +1109,7 @@ worker_handle_request(struct comm_point* c, void* arg, int error,
 	struct respip_client_info* cinfo = NULL, cinfo_tmp;
 	memset(&qinfo, 0, sizeof(qinfo));
 
-	if(error != NETEVENT_NOERROR || !repinfo) {
+	if((error != NETEVENT_NOERROR && error != NETEVENT_DONE)|| !repinfo) {
 		/* some bad tcp query DNS formats give these error calls */
 		verbose(VERB_ALGO, "handle request called with err=%d", error);
 		return 0;
@@ -1717,14 +1717,6 @@ worker_create(struct daemon* daemon, int id, int* ports, int n)
 		return NULL;
 	}
 	explicit_bzero(&seed, sizeof(seed));
-#ifdef USE_DNSTAP
-	if(daemon->cfg->dnstap) {
-		log_assert(daemon->dtenv != NULL);
-		memcpy(&worker->dtenv, daemon->dtenv, sizeof(struct dt_env));
-		if(!dt_init(&worker->dtenv))
-			fatal_exit("dt_init failed");
-	}
-#endif
 	return worker;
 }
 
@@ -1783,13 +1775,22 @@ worker_init(struct worker* worker, struct config_file *cfg,
 	} else { /* !do_sigs */
 		worker->comsig = NULL;
 	}
+#ifdef USE_DNSTAP
+	if(cfg->dnstap) {
+		log_assert(worker->daemon->dtenv != NULL);
+		memcpy(&worker->dtenv, worker->daemon->dtenv, sizeof(struct dt_env));
+		if(!dt_init(&worker->dtenv, worker->base))
+			fatal_exit("dt_init failed");
+	}
+#endif
 	worker->front = listen_create(worker->base, ports,
 		cfg->msg_buffer_size, (int)cfg->incoming_num_tcp,
 		cfg->do_tcp_keepalive
 			? cfg->tcp_keepalive_timeout
 			: cfg->tcp_idle_timeout,
-			worker->daemon->tcl,
-		worker->daemon->listen_sslctx,
+		cfg->harden_large_queries, cfg->http_max_streams,
+		cfg->http_endpoint, cfg->http_notls_downstream,
+		worker->daemon->tcl, worker->daemon->listen_sslctx,
 		dtenv, worker_handle_request, worker);
 	if(!worker->front) {
 		log_err("could not create listening sockets");
