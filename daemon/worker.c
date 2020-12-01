@@ -576,7 +576,7 @@ apply_respip_action(struct worker* worker, const struct query_info* qinfo,
 	struct comm_reply* repinfo, struct ub_packed_rrset_key** alias_rrset,
 	struct reply_info** encode_repp, struct auth_zones* az)
 {
-	struct respip_action_info actinfo = {0};
+	struct respip_action_info actinfo = {0, 0, 0, 0, NULL, 0, NULL};
 	actinfo.action = respip_none;
 
 	if(qinfo->qtype != LDNS_RR_TYPE_A &&
@@ -1807,7 +1807,7 @@ worker_init(struct worker* worker, struct config_file *cfg,
 		&worker_alloc_cleanup, worker,
 		cfg->do_udp || cfg->udp_upstream_without_downstream,
 		worker->daemon->connect_sslctx, cfg->delay_close,
-		cfg->tls_use_sni, dtenv);
+		cfg->tls_use_sni, dtenv, cfg->udp_connect);
 	if(!worker->back) {
 		log_err("could not create outgoing sockets");
 		worker_delete(worker);

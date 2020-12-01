@@ -43,6 +43,7 @@
 #  include <sys/types.h>
 #endif
 #include <sys/time.h>
+#include <limits.h>
 #ifdef USE_TCP_FASTOPEN
 #include <netinet/tcp.h>
 #endif
@@ -530,7 +531,9 @@ create_udp_sock(int family, int socktype, struct sockaddr* addr,
 				return -1;
 			}
 		}
-#  elif defined(IP_DONTFRAG)
+#  elif defined(IP_DONTFRAG) && !defined(__APPLE__)
+		/* the IP_DONTFRAG option if defined in the 11.0 OSX headers,
+		 * but does not work on that version, so we exclude it */
 		int off = 0;
 		if (setsockopt(s, IPPROTO_IP, IP_DONTFRAG, 
 			&off, (socklen_t)sizeof(off)) < 0) {
@@ -1404,6 +1407,7 @@ static int
 resolve_ifa_name(struct ifaddrs *ifas, const char *search_ifa, char ***ip_addresses, int *ip_addresses_size)
 {
 	struct ifaddrs *ifa;
+	void *tmpbuf;
 	int last_ip_addresses_size = *ip_addresses_size;
 
 	for(ifa = ifas; ifa != NULL; ifa = ifa->ifa_next) {
@@ -1468,10 +1472,12 @@ resolve_ifa_name(struct ifaddrs *ifas, const char *search_ifa, char ***ip_addres
 		}
 		verbose(4, "interface %s has address %s", search_ifa, addr_buf);
 
-		*ip_addresses = realloc(*ip_addresses, sizeof(char *) * (*ip_addresses_size + 1));
-		if(!*ip_addresses) {
+		tmpbuf = realloc(*ip_addresses, sizeof(char *) * (*ip_addresses_size + 1));
+		if(!tmpbuf) {
 			log_err("realloc failed: out of memory");
 			return 0;
+		} else {
+			*ip_addresses = tmpbuf;
 		}
 		(*ip_addresses)[*ip_addresses_size] = strdup(addr_buf);
 		if(!(*ip_addresses)[*ip_addresses_size]) {
@@ -1482,10 +1488,12 @@ resolve_ifa_name(struct ifaddrs *ifas, const char *search_ifa, char ***ip_addres
 	}
 
 	if (*ip_addresses_size == last_ip_addresses_size) {
-		*ip_addresses = realloc(*ip_addresses, sizeof(char *) * (*ip_addresses_size + 1));
-		if(!*ip_addresses) {
+		tmpbuf = realloc(*ip_addresses, sizeof(char *) * (*ip_addresses_size + 1));
+		if(!tmpbuf) {
 			log_err("realloc failed: out of memory");
 			return 0;
+		} else {
+			*ip_addresses = tmpbuf;
 		}
 		(*ip_addresses)[*ip_addresses_size] = strdup(search_ifa);
 		if(!(*ip_addresses)[*ip_addresses_size]) {
@@ -2200,7 +2208,7 @@ int http2_submit_dns_response(struct http2_session* h2_session)
 	}
 
 	rlen = sldns_buffer_remaining(h2_session->c->buffer);
-	snprintf(rlen_str, sizeof(rlen_str), "%u", rlen);
+	snprintf(rlen_str, sizeof(rlen_str), "%u", (unsigned)rlen);
 
 	lock_basic_lock(&http2_response_buffer_count_lock);
 	if(http2_response_buffer_count + rlen > http2_response_buffer_max) {
