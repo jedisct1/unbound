@@ -583,6 +583,8 @@ comm_point_send_udp_msg_if(struct comm_point *c, sldns_buffer* packet,
 static int udp_recv_needs_log(int err)
 {
 	switch(err) {
+	case EACCES: /* some hosts send ICMP 'Permission Denied' */
+#ifndef USE_WINSOCK
 	case ECONNREFUSED:
 #  ifdef ENETUNREACH
 	case ENETUNREACH:
@@ -596,6 +598,13 @@ static int udp_recv_needs_log(int err)
 #  ifdef ENETDOWN
 	case ENETDOWN:
 #  endif
+#else /* USE_WINSOCK */
+	case WSAECONNREFUSED:
+	case WSAENETUNREACH:
+	case WSAEHOSTDOWN:
+	case WSAEHOSTUNREACH:
+	case WSAENETDOWN:
+#endif
 		if(verbosity >= VERB_ALGO)
 			return 1;
 		return 0;
@@ -736,7 +745,8 @@ comm_point_udp_callback(int fd, short event, void* arg)
 #else
 			if(WSAGetLastError() != WSAEINPROGRESS &&
 				WSAGetLastError() != WSAECONNRESET &&
-				WSAGetLastError()!= WSAEWOULDBLOCK)
+				WSAGetLastError()!= WSAEWOULDBLOCK &&
+				udp_recv_needs_log(WSAGetLastError()))
 				log_err("recvfrom failed: %s",
 					wsa_strerror(WSAGetLastError()));
 #endif
@@ -760,6 +770,13 @@ comm_point_udp_callback(int fd, short event, void* arg)
 		another UDP port. Note rep.c cannot be reused with TCP fd. */
 			break;
 	}
+}
+
+int adjusted_tcp_timeout(struct comm_point* c)
+{
+	if(c->tcp_timeout_msec < TCP_QUERY_TIMEOUT_MINIMUM)
+		return TCP_QUERY_TIMEOUT_MINIMUM;
+	return c->tcp_timeout_msec;
 }
 
 /** Use a new tcp handler for new query fd, set to read query */
@@ -795,10 +812,7 @@ setup_tcp_handler(struct comm_point* c, int fd, int cur, int max)
 		c->tcp_timeout_msec /= 500;
 	else if (handler_usage > 80)
 		c->tcp_timeout_msec = 0;
-	comm_point_start_listening(c, fd,
-		c->tcp_timeout_msec < TCP_QUERY_TIMEOUT_MINIMUM
-			? TCP_QUERY_TIMEOUT_MINIMUM
-			: c->tcp_timeout_msec);
+	comm_point_start_listening(c, fd, adjusted_tcp_timeout(c));
 }
 
 void comm_base_handle_slow_accept(int ATTR_UNUSED(fd),
@@ -1108,10 +1122,11 @@ tcp_callback_writer(struct comm_point* c)
 			if( (*c->callback)(c, c->cb_arg, NETEVENT_PKT_WRITTEN,
 				&c->repinfo) ) {
 				comm_point_start_listening(c, -1,
-					c->tcp_timeout_msec);
+					adjusted_tcp_timeout(c));
 			}
 		} else {
-			comm_point_start_listening(c, -1, c->tcp_timeout_msec);
+			comm_point_start_listening(c, -1,
+					adjusted_tcp_timeout(c));
 		}
 	}
 }
@@ -1132,7 +1147,8 @@ tcp_callback_reader(struct comm_point* c)
 			comm_point_stop_listening(c);
 		fptr_ok(fptr_whitelist_comm_point(c->callback));
 		if( (*c->callback)(c, c->cb_arg, NETEVENT_NOERROR, &c->repinfo) ) {
-			comm_point_start_listening(c, -1, c->tcp_timeout_msec);
+			comm_point_start_listening(c, -1,
+					adjusted_tcp_timeout(c));
 		}
 	}
 }
@@ -1594,6 +1610,33 @@ comm_point_tcp_handle_read(int fd, struct comm_point* c, int short_ok)
 			if(errno == ECONNRESET && verbosity < 2)
 				return 0; /* silence reset by peer */
 #endif
+#ifdef ENETUNREACH
+			if(errno == ENETUNREACH && verbosity < 2)
+				return 0; /* silence it */
+#endif
+#ifdef EHOSTDOWN
+			if(errno == EHOSTDOWN && verbosity < 2)
+				return 0; /* silence it */
+#endif
+#ifdef EHOSTUNREACH
+			if(errno == EHOSTUNREACH && verbosity < 2)
+				return 0; /* silence it */
+#endif
+#ifdef ENETDOWN
+			if(errno == ENETDOWN && verbosity < 2)
+				return 0; /* silence it */
+#endif
+#ifdef EACCES
+			if(errno == EACCES && verbosity < 2)
+				return 0; /* silence it */
+#endif
+#ifdef ENOTCONN
+			if(errno == ENOTCONN) {
+				log_err_addr("read (in tcp s) failed and this could be because TCP Fast Open is enabled [--disable-tfo-client --disable-tfo-server] but does not work", sock_strerror(errno),
+					&c->repinfo.addr, c->repinfo.addrlen);
+				return 0;
+			}
+#endif
 #else /* USE_WINSOCK */
 			if(WSAGetLastError() == WSAECONNRESET)
 				return 0;
@@ -1892,7 +1935,7 @@ comm_point_tcp_handle_write(int fd, struct comm_point* c)
 	log_assert(c->tcp_write_and_read || sldns_buffer_remaining(buffer) > 0);
 	log_assert(!c->tcp_write_and_read || c->tcp_write_byte_count < c->tcp_write_pkt_len + 2);
 	if(c->tcp_write_and_read) {
-		r = send(fd, (void*)c->tcp_write_pkt + c->tcp_write_byte_count - 2,
+		r = send(fd, (void*)(c->tcp_write_pkt + c->tcp_write_byte_count - 2),
 			c->tcp_write_pkt_len + 2 - c->tcp_write_byte_count, 0);
 	} else {
 		r = send(fd, (void*)sldns_buffer_current(buffer),
@@ -2042,7 +2085,11 @@ comm_point_tcp_handle_callback(int fd, short event, void* arg)
 		}
 		return;
 	}
-	if(event&UB_EV_READ) {
+	if(event&UB_EV_READ
+#ifdef USE_MSG_FASTOPEN
+		&& !(c->tcp_do_fastopen && (event&UB_EV_WRITE))
+#endif
+		) {
 		int has_tcpq = (c->tcp_req_info != NULL);
 		int* moreread = c->tcp_more_read_again;
 		if(!comm_point_tcp_handle_read(fd, c, 0)) {
@@ -2433,7 +2480,7 @@ http_chunked_segment(struct comm_point* c)
 
 #ifdef HAVE_NGHTTP2
 /** Create new http2 session. Called when creating handling comm point. */
-struct http2_session* http2_session_create(struct comm_point* c)
+static struct http2_session* http2_session_create(struct comm_point* c)
 {
 	struct http2_session* session = calloc(1, sizeof(*session));
 	if(!session) {
@@ -2447,7 +2494,7 @@ struct http2_session* http2_session_create(struct comm_point* c)
 #endif
 
 /** Delete http2 session. After closing connection or on error */
-void http2_session_delete(struct http2_session* h2_session)
+static void http2_session_delete(struct http2_session* h2_session)
 {
 #ifdef HAVE_NGHTTP2
 	if(h2_session->callbacks)
@@ -2523,7 +2570,7 @@ void http2_session_add_stream(struct http2_session* h2_session,
 
 /** remove stream from session linked list. After stream close callback or
  * closing connection */
-void http2_session_remove_stream(struct http2_session* h2_session,
+static void http2_session_remove_stream(struct http2_session* h2_session,
 	struct http2_stream* h2_stream)
 {
 	if(h2_stream->prev)
@@ -2649,7 +2696,7 @@ comm_point_http2_handle_read(int ATTR_UNUSED(fd), struct comm_point* c)
 	if(nghttp2_session_want_write(c->h2_session->session)) {
 		c->tcp_is_reading = 0;
 		comm_point_stop_listening(c);
-		comm_point_start_listening(c, -1, c->tcp_timeout_msec);
+		comm_point_start_listening(c, -1, adjusted_tcp_timeout(c));
 	} else if(!nghttp2_session_want_read(c->h2_session->session))
 		return 0; /* connection can be closed */
 	return 1;
@@ -2967,7 +3014,7 @@ comm_point_http2_handle_write(int ATTR_UNUSED(fd), struct comm_point* c)
 	if(nghttp2_session_want_read(c->h2_session->session)) {
 		c->tcp_is_reading = 1;
 		comm_point_stop_listening(c);
-		comm_point_start_listening(c, -1, c->tcp_timeout_msec);
+		comm_point_start_listening(c, -1, adjusted_tcp_timeout(c));
 	} else if(!nghttp2_session_want_write(c->h2_session->session))
 		return 0; /* connection can be closed */
 	return 1;
@@ -3925,11 +3972,11 @@ comm_point_send_reply(struct comm_reply *repinfo)
 			repinfo->c->tcp_is_reading = 0;
 			comm_point_stop_listening(repinfo->c);
 			comm_point_start_listening(repinfo->c, -1,
-				repinfo->c->tcp_timeout_msec);
+				adjusted_tcp_timeout(repinfo->c));
 			return;
 		} else {
 			comm_point_start_listening(repinfo->c, -1,
-				repinfo->c->tcp_timeout_msec);
+				adjusted_tcp_timeout(repinfo->c));
 		}
 	}
 }
