@@ -179,7 +179,7 @@ extern struct config_parser_state* cfg_parser;
 %token VAR_TLS_SESSION_TICKET_KEYS VAR_RPZ VAR_TAGS VAR_RPZ_ACTION_OVERRIDE
 %token VAR_RPZ_CNAME_OVERRIDE VAR_RPZ_LOG VAR_RPZ_LOG_NAME
 %token VAR_DYNLIB VAR_DYNLIB_FILE VAR_EDNS_CLIENT_STRING
-%token VAR_EDNS_CLIENT_STRING_OPCODE
+%token VAR_EDNS_CLIENT_STRING_OPCODE VAR_NSID
 
 %%
 toplevelvars: /* empty */ | toplevelvars toplevelvar ;
@@ -293,7 +293,7 @@ content_server: server_num_threads | server_verbosity | server_port |
 	server_stream_wait_size | server_tls_ciphers |
 	server_tls_ciphersuites | server_tls_session_ticket_keys |
 	server_tls_use_sni | server_edns_client_string |
-	server_edns_client_string_opcode
+	server_edns_client_string_opcode | server_nsid
 	;
 stubstart: VAR_STUB_ZONE
 	{
@@ -1304,6 +1304,22 @@ server_version: VAR_VERSION STRING_ARG
 		cfg_parser->cfg->version = $2;
 	}
 	;
+server_nsid: VAR_NSID STRING_ARG
+	{
+		OUTYY(("P(server_nsid:%s)\n", $2));
+		free(cfg_parser->cfg->nsid_cfg_str);
+		cfg_parser->cfg->nsid_cfg_str = $2;
+		free(cfg_parser->cfg->nsid);
+		cfg_parser->cfg->nsid = NULL;
+		cfg_parser->cfg->nsid_len = 0;
+		if (*$2 == 0)
+			; /* pass; empty string is not setting nsid */
+		else if (!(cfg_parser->cfg->nsid = cfg_parse_nsid(
+					$2, &cfg_parser->cfg->nsid_len)))
+			yyerror("the NSID must be either a hex string or an "
+			    "ascii character string prepended with ascii_.");
+	}
+	;
 server_so_rcvbuf: VAR_SO_RCVBUF STRING_ARG
 	{
 		OUTYY(("P(server_so_rcvbuf:%s)\n", $2));
@@ -2030,6 +2046,9 @@ server_local_zone: VAR_LOCAL_ZONE STRING_ARG STRING_ARG
 		   && strcmp($3, "always_transparent")!=0
 		   && strcmp($3, "always_refuse")!=0
 		   && strcmp($3, "always_nxdomain")!=0
+		   && strcmp($3, "always_nodata")!=0
+		   && strcmp($3, "always_deny")!=0
+		   && strcmp($3, "always_null")!=0
 		   && strcmp($3, "noview")!=0
 		   && strcmp($3, "inform")!=0 && strcmp($3, "inform_deny")!=0
 		   && strcmp($3, "inform_redirect") != 0
@@ -2038,8 +2057,9 @@ server_local_zone: VAR_LOCAL_ZONE STRING_ARG STRING_ARG
 				"refuse, redirect, transparent, "
 				"typetransparent, inform, inform_deny, "
 				"inform_redirect, always_transparent, "
-				"always_refuse, always_nxdomain, noview "
-				", nodefault or ipset");
+				"always_refuse, always_nxdomain, "
+				"always_nodata, always_deny, always_null, "
+				"noview, nodefault or ipset");
 			free($2);
 			free($3);
 		} else if(strcmp($3, "nodefault")==0) {
