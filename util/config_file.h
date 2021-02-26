@@ -396,6 +396,8 @@ struct config_file {
 	int serve_original_ttl;
 	/** nsec3 maximum iterations per key size, string */
 	char* val_nsec3_key_iterations;
+	/** if zonemd failures are permitted, only logged */
+	int zonemd_permissive_mode;
 	/** autotrust add holddown time, in seconds */
 	unsigned int add_holddown;
 	/** autotrust del holddown time, in seconds */
@@ -727,6 +729,8 @@ struct config_auth {
 	/** Always reply with this CNAME target if the cname override action is
 	 * used */
 	char* rpz_cname;
+	/** Reject absence of ZONEMD records, zone must have one */
+	int zonemd_reject_absence;
 };
 
 /**
@@ -1300,6 +1304,16 @@ void w_config_adjust_directory(struct config_file* cfg);
 
 /** debug option for unit tests. */
 extern int fake_dsa, fake_sha1;
+
+/** see if interface is https, its port number == the https port number */
+int if_is_https(const char* ifname, const char* port, int https_port);
+
+/**
+ * Return true if the config contains settings that enable https.
+ * @param cfg: config information.
+ * @return true if https ports are used for server.
+ */
+int cfg_has_https(struct config_file* cfg);
 
 #endif /* UTIL_CONFIG_FILE_H */
 
