@@ -407,7 +407,7 @@ AC_CHECK_HEADERS([net/if.h],,, [
 ])
 
 # Check for Apple header. This uncovers TARGET_OS_IPHONE, TARGET_OS_TV or TARGET_OS_WATCH
-AC_CHECK_HEADERS([TargetConditionals.h])
+AC_CHECK_HEADERS([TargetConditionals.h],,, [AC_INCLUDES_DEFAULT])
 
 # check for types.  
 # Using own tests for int64* because autoconf builtin only give 32bit.
@@ -859,7 +859,7 @@ AC_CHECK_FUNCS([OPENSSL_config EVP_sha1 EVP_sha256 EVP_sha512 FIPS_mode EVP_MD_C
 # these check_funcs need -lssl
 BAKLIBS="$LIBS"
 LIBS="-lssl $LIBS"
-AC_CHECK_FUNCS([OPENSSL_init_ssl SSL_CTX_set_security_level SSL_set1_host SSL_get0_peername X509_VERIFY_PARAM_set1_host SSL_CTX_set_ciphersuites SSL_CTX_set_tlsext_ticket_key_evp_cb SSL_CTX_set_alpn_select_cb])
+AC_CHECK_FUNCS([OPENSSL_init_ssl SSL_CTX_set_security_level SSL_set1_host SSL_get0_peername X509_VERIFY_PARAM_set1_host SSL_CTX_set_ciphersuites SSL_CTX_set_tlsext_ticket_key_evp_cb SSL_CTX_set_alpn_select_cb SSL_get0_alpn_selected SSL_CTX_set_alpn_protos])
 LIBS="$BAKLIBS"
 
 AC_CHECK_DECLS([SSL_COMP_get_compression_methods,sk_SSL_COMP_pop_free,SSL_CTX_set_ecdh_auto], [], [], [
@@ -1509,6 +1509,7 @@ AC_CHECK_FUNCS([daemon])
 if test $ac_cv_func_daemon = yes; then
 	ACX_FUNC_DEPRECATED([daemon], [(void)daemon(0, 0);], [
 #include <stdlib.h>
+#include <unistd.h>
 ])
 fi
 
@@ -1712,7 +1713,7 @@ case "$enable_allsymbols" in
 	yes)
 	COMMON_OBJ_ALL_SYMBOLS=""
 	UBSYMS=""
-	EXTRALINK="-L. -L.libs -lunbound"
+	EXTRALINK="libunbound.la"
 	AC_DEFINE(EXPORT_ALL_SYMBOLS, 1, [Define this if you enabled-allsymbols from libunbound to link binaries to it for smaller install size, but the libunbound export table is polluted by internal symbols])
 	;;
 	no|*)
@@ -1779,6 +1780,8 @@ if test "$found_libhiredis" = "yes"; then enable_cachedb="yes"; fi
 case "$enable_cachedb" in
     yes)
     	AC_DEFINE([USE_CACHEDB], [1], [Define to 1 to use cachedb support])
+	AC_SUBST([CACHEDB_SRC], ["cachedb/cachedb.c cachedb/redis.c"])
+	AC_SUBST([CACHEDB_OBJ], ["cachedb.lo redis.lo"])
     	;;
     no|*)
     	# nothing

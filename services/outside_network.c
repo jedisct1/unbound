@@ -721,7 +721,7 @@ static void
 waiting_tcp_callback(struct waiting_tcp* w, struct comm_point* c, int error,
 	struct comm_reply* reply_info)
 {
-	if(w->cb) {
+	if(w && w->cb) {
 		fptr_ok(fptr_whitelist_pending_tcp(w->cb));
 		(void)(*w->cb)(c, w->cb_arg, error, reply_info);
 	}
@@ -890,8 +890,17 @@ reuse_tcp_remove_tree_list(struct outside_network* outnet,
 	verbose(VERB_CLIENT, "reuse_tcp_remove_tree_list");
 	if(reuse->node.key) {
 		/* delete it from reuse tree */
-		(void)rbtree_delete(&outnet->tcp_reuse, reuse);
+		if(!rbtree_delete(&outnet->tcp_reuse, reuse)) {
+			/* should not be possible, it should be there */
+			char buf[256];
+			addr_to_str(&reuse->addr, reuse->addrlen, buf,
+				sizeof(buf));
+			log_err("reuse tcp delete: node not present, internal error, %s ssl %d lru %d", buf, reuse->is_ssl, reuse->item_on_lru_list);
+		}
 		reuse->node.key = NULL;
+		/* defend against loops on broken tree by zeroing the
+		 * rbnode structure */
+		memset(&reuse->node, 0, sizeof(reuse->node));
 	}
 	/* delete from reuse list */
 	if(reuse->item_on_lru_list) {

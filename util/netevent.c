@@ -299,6 +299,7 @@ udp_send_errno_needs_log(struct sockaddr* addr, socklen_t addrlen)
 #  ifdef ENETDOWN
 		case ENETDOWN:
 #  endif
+		case EPERM:
 			if(verbosity < VERB_ALGO)
 				return 0;
 		default:
@@ -1313,6 +1314,7 @@ ssl_handshake(struct comm_point* c)
 			c->repinfo.addrlen);
 	}
 
+#ifdef HAVE_SSL_GET0_ALPN_SELECTED
 	/* check if http2 use is negotiated */
 	if(c->type == comm_http && c->h2_session) {
 		const unsigned char *alpn;
@@ -1324,6 +1326,7 @@ ssl_handshake(struct comm_point* c)
 			c->use_h2 = 1;
 		}
 	}
+#endif
 
 	/* setup listen rw correctly */
 	if(c->tcp_is_reading) {
@@ -1633,6 +1636,10 @@ comm_point_tcp_handle_read(int fd, struct comm_point* c, int short_ok)
 			if(errno == ECONNRESET && verbosity < 2)
 				return 0; /* silence reset by peer */
 #endif
+#ifdef ECONNREFUSED
+			if(errno == ECONNREFUSED && verbosity < 2)
+				return 0; /* silence reset by peer */
+#endif
 #ifdef ENETUNREACH
 			if(errno == ENETUNREACH && verbosity < 2)
 				return 0; /* silence it */
@@ -1661,6 +1668,16 @@ comm_point_tcp_handle_read(int fd, struct comm_point* c, int short_ok)
 			}
 #endif
 #else /* USE_WINSOCK */
+			if(WSAGetLastError() == WSAECONNREFUSED && verbosity < 2)
+				return 0;
+			if(WSAGetLastError() == WSAEHOSTDOWN && verbosity < 2)
+				return 0;
+			if(WSAGetLastError() == WSAEHOSTUNREACH && verbosity < 2)
+				return 0;
+			if(WSAGetLastError() == WSAENETDOWN && verbosity < 2)
+				return 0;
+			if(WSAGetLastError() == WSAENETUNREACH && verbosity < 2)
+				return 0;
 			if(WSAGetLastError() == WSAECONNRESET)
 				return 0;
 			if(WSAGetLastError() == WSAEINPROGRESS)
@@ -2387,7 +2404,7 @@ http_process_chunk_header(struct comm_point* c)
 	return 1;
 }
 
-/** handle nonchunked data segment */
+/** handle nonchunked data segment, 0=fail, 1=wait */
 static int
 http_nonchunk_segment(struct comm_point* c)
 {
@@ -2396,7 +2413,7 @@ http_nonchunk_segment(struct comm_point* c)
 	 * we are looking to read tcp_byte_count more data
 	 * and then the transfer is done. */
 	size_t remainbufferlen;
-	size_t got_now = sldns_buffer_limit(c->buffer) - c->http_stored;
+	size_t got_now = sldns_buffer_limit(c->buffer);
 	if(c->tcp_byte_count <= got_now) {
 		/* done, this is the last data fragment */
 		c->http_stored = 0;
@@ -2405,7 +2422,6 @@ http_nonchunk_segment(struct comm_point* c)
 		(void)(*c->callback)(c, c->cb_arg, NETEVENT_DONE, NULL);
 		return 1;
 	}
-	c->tcp_byte_count -= got_now;
 	/* if we have the buffer space,
 	 * read more data collected into the buffer */
 	remainbufferlen = sldns_buffer_capacity(c->buffer) -
@@ -2421,6 +2437,7 @@ http_nonchunk_segment(struct comm_point* c)
 	}
 	/* call callback with this data amount, then
 	 * wait for more */
+	c->tcp_byte_count -= got_now;
 	c->http_stored = 0;
 	sldns_buffer_set_position(c->buffer, 0);
 	fptr_ok(fptr_whitelist_comm_point(c->callback));
