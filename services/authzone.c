@@ -1755,6 +1755,8 @@ zonemd_offline_verify(struct auth_zone* z, struct module_env* env_for_val,
 {
 	struct module_env env;
 	time_t now = 0;
+	if(!z->zonemd_check)
+		return;
 	env = *env_for_val;
 	env.scratch_buffer = sldns_buffer_new(env.cfg->msg_buffer_size);
 	if(!env.scratch_buffer) {
@@ -2096,6 +2098,7 @@ auth_zones_cfg(struct auth_zones* az, struct config_auth* c)
 	z->for_downstream = c->for_downstream;
 	z->for_upstream = c->for_upstream;
 	z->fallback_enabled = c->fallback_enabled;
+	z->zonemd_check = c->zonemd_check;
 	z->zonemd_reject_absence = c->zonemd_reject_absence;
 	if(c->isrpz && !z->rpz){
 		if(!(z->rpz = rpz_create(c))){
@@ -5442,7 +5445,7 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 	/* perform AXFR/IXFR */
 	/* set the packet to be written */
 	/* create new ID */
-	xfr->task_transfer->id = (uint16_t)(ub_random(env->rnd)&0xffff);
+	xfr->task_transfer->id = GET_RANDOM_ID(env->rnd);
 	xfr_create_ixfr_packet(xfr, env->scratch_buffer,
 		xfr->task_transfer->id, master);
 
@@ -6292,7 +6295,7 @@ xfr_probe_send_probe(struct auth_xfer* xfr, struct module_env* env,
 	/* create new ID for new probes, but not on timeout retries,
 	 * this means we'll accept replies to previous retries to same ip */
 	if(timeout == AUTH_PROBE_TIMEOUT)
-		xfr->task_probe->id = (uint16_t)(ub_random(env->rnd)&0xffff);
+		xfr->task_probe->id = GET_RANDOM_ID(env->rnd);
 	xfr_create_soa_probe_packet(xfr, env->scratch_buffer, 
 		xfr->task_probe->id);
 	/* we need to remove the cp if we have a different ip4/ip6 type now */
@@ -8234,6 +8237,8 @@ void auth_zone_verify_zonemd(struct auth_zone* z, struct module_env* env,
 	int is_insecure = 0;
 	/* verify the ZONEMD if present.
 	 * If not present check if absence is allowed by DNSSEC */
+	if(!z->zonemd_check)
+		return;
 
 	/* if zone is under a trustanchor */
 	/* is it equal to trustanchor - get dnskey's verified */
@@ -8302,6 +8307,10 @@ void auth_zones_pickup_zonemd_verify(struct auth_zones* az,
 	lock_rw_rdlock(&az->lock);
 	RBTREE_FOR(z, struct auth_zone*, &az->ztree) {
 		lock_rw_wrlock(&z->lock);
+		if(!z->zonemd_check) {
+			lock_rw_unlock(&z->lock);
+			continue;
+		}
 		key.dclass = z->dclass;
 		key.namelabs = z->namelabs;
 		if(z->namelen > sizeof(savezname)) {
