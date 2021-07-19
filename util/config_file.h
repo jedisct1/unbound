@@ -340,10 +340,14 @@ struct config_file {
 	int hide_version;
 	/** do not report trustanchor (trustanchor.unbound) */
 	int hide_trustanchor;
+	/** do not report the User-Agent HTTP header */
+	int hide_http_user_agent;
 	/** identity, hostname is returned if "". */
 	char* identity;
 	/** version, package version returned if "". */
 	char* version;
+	/** User-Agent for HTTP header */
+	char* http_user_agent;
 	/** nsid */
 	char *nsid_cfg_str;
 	uint8_t *nsid;
@@ -373,6 +377,8 @@ struct config_file {
 	int32_t val_sig_skew_min;
 	/** the maximum for signature clock skew */
 	int32_t val_sig_skew_max;
+	/** max number of query restarts, number of IPs to probe */
+	int32_t val_max_restart;
 	/** this value sets the number of seconds before revalidating bogus */
 	int bogus_ttl; 
 	/** should validator clean additional section for secure msgs */

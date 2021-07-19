@@ -5152,6 +5152,9 @@ xfr_write_after_update(struct auth_xfer* xfr, struct module_env* env)
 		lock_rw_unlock(&z->lock);
 		return;
 	}
+#ifdef UB_ON_WINDOWS
+	(void)unlink(zfilename); /* windows does not replace file with rename() */
+#endif
 	if(rename(tmpfile, zfilename) < 0) {
 		log_err("could not rename(%s, %s): %s", tmpfile, zfilename,
 			strerror(errno));
@@ -5423,7 +5426,7 @@ xfr_transfer_init_fetch(struct auth_xfer* xfr, struct module_env* env)
 		xfr->task_transfer->cp = outnet_comm_point_for_http(
 			env->outnet, auth_xfer_transfer_http_callback, xfr,
 			&addr, addrlen, -1, master->ssl, master->host,
-			master->file);
+			master->file, env->cfg);
 		if(!xfr->task_transfer->cp) {
 			char zname[255+1], as[256];
 			dname_str(xfr->name, zname);
@@ -7168,12 +7171,14 @@ xfer_set_masters(struct auth_master** list, struct config_auth* c,
 	if(with_http)
 	  for(p = c->urls; p; p = p->next) {
 		m = auth_master_new(&list);
+		if(!m) return 0;
 		m->http = 1;
 		if(!parse_url(p->str, &m->host, &m->file, &m->port, &m->ssl))
 			return 0;
 	}
 	for(p = c->masters; p; p = p->next) {
 		m = auth_master_new(&list);
+		if(!m) return 0;
 		m->ixfr = 1; /* this flag is not configurable */
 		m->host = strdup(p->str);
 		if(!m->host) {
@@ -7183,6 +7188,7 @@ xfer_set_masters(struct auth_master** list, struct config_auth* c,
 	}
 	for(p = c->allow_notify; p; p = p->next) {
 		m = auth_master_new(&list);
+		if(!m) return 0;
 		m->allow_notify = 1;
 		m->host = strdup(p->str);
 		if(!m->host) {
