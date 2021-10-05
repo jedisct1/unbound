@@ -777,6 +777,12 @@ if test "`uname`" = "NetBSD"; then
 	NETBSD_LINTFLAGS='"-D__RENAME(x)=" -D_NETINET_IN_H_'
 	AC_SUBST(NETBSD_LINTFLAGS)
 fi
+
+if test "`uname -o`" = "GNU/Linux"; then
+	# splint cannot parse modern c99 header files
+	GCC_DOCKER_LINTFLAGS='-syntax'
+	AC_SUBST(GCC_DOCKER_LINTFLAGS)
+fi
 CONFIG_DATE=`date +%Y%m%d`
 AC_SUBST(CONFIG_DATE)
 
@@ -851,7 +857,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[
 ])
 
 AC_MSG_CHECKING([for LibreSSL])
-if grep VERSION_TEXT $ssldir/include/openssl/opensslv.h | grep "LibreSSL" >/dev/null; then
+if grep VERSION_TEXT $ssldir_include/openssl/opensslv.h | grep "LibreSSL" >/dev/null; then
 	AC_MSG_RESULT([yes])
 	AC_DEFINE([HAVE_LIBRESSL], [1], [Define if we have LibreSSL])
 	# libressl provides these compat functions, but they may also be
@@ -861,7 +867,7 @@ else
 	AC_MSG_RESULT([no])
 fi
 AC_CHECK_HEADERS([openssl/conf.h openssl/engine.h openssl/bn.h openssl/dh.h openssl/dsa.h openssl/rsa.h openssl/core_names.h openssl/param_build.h],,, [AC_INCLUDES_DEFAULT])
-AC_CHECK_FUNCS([OPENSSL_config EVP_sha1 EVP_sha256 EVP_sha512 FIPS_mode EVP_MD_CTX_new OpenSSL_add_all_digests OPENSSL_init_crypto EVP_cleanup ENGINE_cleanup ERR_load_crypto_strings CRYPTO_cleanup_all_ex_data ERR_free_strings RAND_cleanup DSA_SIG_set0 EVP_dss1 EVP_DigestVerify EVP_aes_256_cbc EVP_EncryptInit_ex HMAC_Init_ex CRYPTO_THREADID_set_callback EVP_MAC_CTX_set_params OSSL_PARAM_BLD_new])
+AC_CHECK_FUNCS([OPENSSL_config EVP_sha1 EVP_sha256 EVP_sha512 FIPS_mode EVP_MD_CTX_new OpenSSL_add_all_digests OPENSSL_init_crypto EVP_cleanup ENGINE_cleanup ERR_load_crypto_strings CRYPTO_cleanup_all_ex_data ERR_free_strings RAND_cleanup DSA_SIG_set0 EVP_dss1 EVP_DigestVerify EVP_aes_256_cbc EVP_EncryptInit_ex HMAC_Init_ex CRYPTO_THREADID_set_callback EVP_MAC_CTX_set_params OSSL_PARAM_BLD_new BIO_set_callback_ex])
 
 # these check_funcs need -lssl
 BAKLIBS="$LIBS"
@@ -981,7 +987,7 @@ AC_MSG_CHECKING([if GOST works])
 if test c${cross_compiling} = cno; then
 BAKCFLAGS="$CFLAGS"
 if test -n "$ssldir"; then
-	CFLAGS="$CFLAGS -Wl,-rpath,$ssldir/lib"
+	CFLAGS="$CFLAGS -Wl,-rpath,$ssldir_lib"
 fi
 AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <string.h>
@@ -1104,8 +1110,8 @@ case "$enable_ecdsa" in
 	      ])
 	      # see if OPENSSL 1.0.0 or later (has EVP MD and Verify independency)
 	      AC_MSG_CHECKING([if openssl supports SHA2 and ECDSA with EVP])
-	      if grep OPENSSL_VERSION_TEXT $ssldir/include/openssl/opensslv.h | grep "OpenSSL" >/dev/null; then
-		if grep OPENSSL_VERSION_NUMBER $ssldir/include/openssl/opensslv.h | grep 0x0 >/dev/null; then
+	      if grep OPENSSL_VERSION_TEXT $ssldir_include/openssl/opensslv.h | grep "OpenSSL" >/dev/null; then
+		if grep OPENSSL_VERSION_NUMBER $ssldir_include/openssl/opensslv.h | grep 0x0 >/dev/null; then
 		  AC_MSG_RESULT([no])
 		  AC_DEFINE_UNQUOTED([USE_ECDSA_EVP_WORKAROUND], [1], [Define this to enable an EVP workaround for older openssl])
 		else

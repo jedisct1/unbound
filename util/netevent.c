@@ -300,6 +300,7 @@ udp_send_errno_needs_log(struct sockaddr* addr, socklen_t addrlen)
 		case ENETDOWN:
 #  endif
 		case EPERM:
+		case EACCES:
 			if(verbosity < VERB_ALGO)
 				return 0;
 		default:
@@ -942,7 +943,16 @@ int comm_point_perform_accept(struct comm_point* c,
 
 #ifdef USE_WINSOCK
 static long win_bio_cb(BIO *b, int oper, const char* ATTR_UNUSED(argp),
-        int ATTR_UNUSED(argi), long argl, long retvalue)
+#ifdef HAVE_BIO_SET_CALLBACK_EX
+	size_t ATTR_UNUSED(len),
+#endif
+        int ATTR_UNUSED(argi), long argl,
+#ifndef HAVE_BIO_SET_CALLBACK_EX
+	long retvalue
+#else
+	int retvalue, size_t* ATTR_UNUSED(processed)
+#endif
+	)
 {
 	int wsa_err = WSAGetLastError(); /* store errcode before it is gone */
 	verbose(VERB_ALGO, "bio_cb %d, %s %s %s", oper,
@@ -972,9 +982,17 @@ comm_point_tcp_win_bio_cb(struct comm_point* c, void* thessl)
 {
 	SSL* ssl = (SSL*)thessl;
 	/* set them both just in case, but usually they are the same BIO */
+#ifdef HAVE_BIO_SET_CALLBACK_EX
+	BIO_set_callback_ex(SSL_get_rbio(ssl), &win_bio_cb);
+#else
 	BIO_set_callback(SSL_get_rbio(ssl), &win_bio_cb);
+#endif
 	BIO_set_callback_arg(SSL_get_rbio(ssl), (char*)c->ev->ev);
+#ifdef HAVE_BIO_SET_CALLBACK_EX
+	BIO_set_callback_ex(SSL_get_wbio(ssl), &win_bio_cb);
+#else
 	BIO_set_callback(SSL_get_wbio(ssl), &win_bio_cb);
+#endif
 	BIO_set_callback_arg(SSL_get_wbio(ssl), (char*)c->ev->ev);
 }
 #endif
@@ -1862,13 +1880,22 @@ comm_point_tcp_handle_write(int fd, struct comm_point* c)
 			if(errno == EINTR || errno == EAGAIN)
 				return 1;
 			/* Not handling EISCONN here as shouldn't ever hit that case.*/
-			if(errno != EPIPE && errno != 0 && verbosity < 2)
-				return 0; /* silence lots of chatter in the logs */
-			if(errno != EPIPE && errno != 0) {
+			if(errno != EPIPE
+#ifdef EOPNOTSUPP
+				/* if /proc/sys/net/ipv4/tcp_fastopen is
+				 * disabled on Linux, sendmsg may return
+				 * 'Operation not supported', if so
+				 * fallthrough to ordinary connect. */
+				&& errno != EOPNOTSUPP
+#endif
+				&& errno != 0) {
+				if(verbosity < 2)
+					return 0; /* silence lots of chatter in the logs */
 				log_err_addr("tcp sendmsg", strerror(errno),
 					&c->repinfo.addr, c->repinfo.addrlen);
 				return 0;
 			}
+			verbose(VERB_ALGO, "tcp sendmsg for fastopen failed (with %s), try normal connect", strerror(errno));
 			/* fallthrough to nonFASTOPEN
 			 * (MSG_FASTOPEN on Linux 3 produces EPIPE)
 			 * we need to perform connect() */
