@@ -1,3 +1,24 @@
+15 November 2021: Tom
+	- Improve EDNS option handling, now also works for synthesised
+	  responses such as local-data and server.id CH TXT responses.
+
+5 November 2021: George
+	- Fix for #558: fix loop in comm_point->tcp_free when a comm_point is
+	  reclaimed more than once during callbacks.
+	- Fix for #558: clear the UB_EV_TIMEOUT bit before adding an event.
+
+5 November 2021: Wouter
+	- Fix that forward-zone name is documented as the full name of the
+	  zone. It is not relative but a fully qualified domain name.
+	- Fix analyzer review failure in rpz action override code to not
+	  crash on unlocking the local zone lock.
+	- Fix to remove unused code from rpz resolve client and action
+	  function.
+	- Merge #565: unbound.service.in: Disable ProtectKernelTunables again.
+
+2 November 2021: Wouter
+	- Fix #552: Unbound assumes index.html exists on RPZ host.
+
 11 October 2021: Wouter
 	- Fix chaos replies to have truncation for short message lengths,
 	  or long reply strings.

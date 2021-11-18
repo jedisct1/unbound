@@ -1476,8 +1476,10 @@ rpz_resolve_client_action_and_zone(struct auth_zones* az, struct query_info* qin
 					r->action_override,
 					qinfo, repinfo, NULL, r->log_name);
 			stats->rpz_action[r->action_override]++;
-			lock_rw_unlock(&z->lock);
-			z = NULL;
+			if(z != NULL) {
+				lock_rw_unlock(&z->lock);
+				z = NULL;
+			}
 			if(node != NULL) {
 				lock_rw_unlock(&node->lock);
 				node = NULL;
@@ -1485,11 +1487,6 @@ rpz_resolve_client_action_and_zone(struct auth_zones* az, struct query_info* qin
 		}
 		if(z || node) {
 			break;
-		} else {
-			if(node != NULL) {
-				lock_rw_unlock(&node->lock);
-				node = NULL;
-			}
 		}
 		/* not found in this auth_zone */
 		lock_rw_unlock(&a->lock);
