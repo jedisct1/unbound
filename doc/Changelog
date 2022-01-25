@@ -1,3 +1,28 @@
+25 January 2022: George
+	- Fix #588: Unbound 1.13.2 crashes due to p->pc is NULL in
+	  serviced_udp_callback.
+	- Merge PR #612: TCP race condition.
+
+25 January 2022: Wouter
+	- Fix #610: Undefine-shift in sldns_str2wire_hip_buf.
+
+19 January 2022: George
+	- For dnstap, do not wakeupnow right there. Instead zero the timer to
+	  force the wakeup callback asap.
+
+14 January 2022: George
+	- Merge PR #605:
+	  - Fix EDNS to upstream where the same option could be attached
+	     more than once.
+	  - Add a region to serviced_query for allocations.
+
+14 January 2022: Wouter
+	- Add rpz: for-downstream: yesno option, where the RPZ zone is
+	  authoritatively answered for, so the RPZ zone contents can be
+	  checked with DNS queries directed at the RPZ zone.
+	- For #602: Allow the module-config "subnetcache validator cachedb
+	  iterator".
+
 11 January 2022: George
 	- Fix prematurely terminated TCP queries when a reply has the same ID.
 
