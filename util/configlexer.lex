@@ -272,6 +272,7 @@ interface{COLON}		{ YDVAR(1, VAR_INTERFACE) }
 ip-address{COLON}		{ YDVAR(1, VAR_INTERFACE) }
 outgoing-interface{COLON}	{ YDVAR(1, VAR_OUTGOING_INTERFACE) }
 interface-automatic{COLON}	{ YDVAR(1, VAR_INTERFACE_AUTOMATIC) }
+interface-automatic-ports{COLON} { YDVAR(1, VAR_INTERFACE_AUTOMATIC_PORTS) }
 so-rcvbuf{COLON}		{ YDVAR(1, VAR_SO_RCVBUF) }
 so-sndbuf{COLON}		{ YDVAR(1, VAR_SO_SNDBUF) }
 so-reuseport{COLON}		{ YDVAR(1, VAR_SO_REUSEPORT) }
@@ -502,6 +503,8 @@ ratelimit-for-domain{COLON}	{ YDVAR(2, VAR_RATELIMIT_FOR_DOMAIN) }
 ratelimit-below-domain{COLON}	{ YDVAR(2, VAR_RATELIMIT_BELOW_DOMAIN) }
 ip-ratelimit-factor{COLON}		{ YDVAR(1, VAR_IP_RATELIMIT_FACTOR) }
 ratelimit-factor{COLON}		{ YDVAR(1, VAR_RATELIMIT_FACTOR) }
+ip-ratelimit-backoff{COLON}		{ YDVAR(1, VAR_IP_RATELIMIT_BACKOFF) }
+ratelimit-backoff{COLON}		{ YDVAR(1, VAR_RATELIMIT_BACKOFF) }
 outbound-msg-retry{COLON}		{ YDVAR(1, VAR_OUTBOUND_MSG_RETRY) }
 low-rtt{COLON}			{ YDVAR(1, VAR_LOW_RTT) }
 fast-server-num{COLON}		{ YDVAR(1, VAR_FAST_SERVER_NUM) }

@@ -205,6 +205,8 @@ struct config_file {
 	/** automatic interface for incoming messages. Uses ipv6 remapping,
 	 * and recvmsg/sendmsg ancillary data to detect interfaces, boolean */
 	int if_automatic;
+	/** extra ports to open if if_automatic enabled, or NULL for default */
+	char* if_automatic_ports;
 	/** SO_RCVBUF size to set on port 53 UDP socket */
 	size_t so_rcvbuf;
 	/** SO_SNDBUF size to set on port 53 UDP socket */
@@ -565,6 +567,10 @@ struct config_file {
 	size_t ip_ratelimit_size;
 	/** ip_ratelimit factor, 0 blocks all, 10 allows 1/10 of traffic */
 	int ip_ratelimit_factor;
+	/** ratelimit backoff, when on, if the limit is reached it is
+	 *  considered an attack and it backs off until 'demand' decreases over
+	 *  the RATE_WINDOW. */
+	int ip_ratelimit_backoff;
 
 	/** ratelimit for domains. 0 is off, otherwise qps (unless overridden) */
 	int ratelimit;
@@ -578,6 +584,11 @@ struct config_file {
 	struct config_str2list* ratelimit_below_domain;
 	/** ratelimit factor, 0 blocks all, 10 allows 1/10 of traffic */
 	int ratelimit_factor;
+	/** ratelimit backoff, when on, if the limit is reached it is
+	 *  considered an attack and it backs off until 'demand' decreases over
+	 *  the RATE_WINDOW. */
+	int ratelimit_backoff;
+
 	/** number of retries on outgoing queries */
 	int outbound_msg_retry;
 	/** minimise outgoing QNAME and hide original QTYPE if possible */

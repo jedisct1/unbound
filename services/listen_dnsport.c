@@ -47,6 +47,7 @@
 #ifdef USE_TCP_FASTOPEN
 #include <netinet/tcp.h>
 #endif
+#include <ctype.h>
 #include "services/listen_dnsport.h"
 #include "services/outside_network.h"
 #include "util/netevent.h"
@@ -1369,40 +1370,39 @@ listen_create(struct comm_base* base, struct listen_port* ports,
 	while(ports) {
 		struct comm_point* cp = NULL;
 		if(ports->ftype == listen_type_udp ||
-		   ports->ftype == listen_type_udp_dnscrypt)
-			cp = comm_point_create_udp(base, ports->fd, 
+		   ports->ftype == listen_type_udp_dnscrypt) {
+			cp = comm_point_create_udp(base, ports->fd,
 				front->udp_buff, cb, cb_arg, ports->socket);
-		else if(ports->ftype == listen_type_tcp ||
-				ports->ftype == listen_type_tcp_dnscrypt)
-			cp = comm_point_create_tcp(base, ports->fd, 
+		} else if(ports->ftype == listen_type_tcp ||
+				ports->ftype == listen_type_tcp_dnscrypt) {
+			cp = comm_point_create_tcp(base, ports->fd,
 				tcp_accept_count, tcp_idle_timeout,
 				harden_large_queries, 0, NULL,
 				tcp_conn_limit, bufsize, front->udp_buff,
 				ports->ftype, cb, cb_arg, ports->socket);
-		else if(ports->ftype == listen_type_ssl ||
+		} else if(ports->ftype == listen_type_ssl ||
 			ports->ftype == listen_type_http) {
-			cp = comm_point_create_tcp(base, ports->fd, 
+			cp = comm_point_create_tcp(base, ports->fd,
 				tcp_accept_count, tcp_idle_timeout,
 				harden_large_queries,
 				http_max_streams, http_endpoint,
 				tcp_conn_limit, bufsize, front->udp_buff,
 				ports->ftype, cb, cb_arg, ports->socket);
-			if(http_notls && ports->ftype == listen_type_http)
-				cp->ssl = NULL;
-			else
-				cp->ssl = sslctx;
 			if(ports->ftype == listen_type_http) {
 				if(!sslctx && !http_notls) {
-				  log_warn("HTTPS port configured, but no TLS "
-					"tls-service-key or tls-service-pem "
-					"set");
+					log_warn("HTTPS port configured, but "
+						"no TLS tls-service-key or "
+						"tls-service-pem set");
 				}
 #ifndef HAVE_SSL_CTX_SET_ALPN_SELECT_CB
-				if(!http_notls)
-				  log_warn("Unbound is not compiled with an "
-					"OpenSSL version supporting ALPN "
-					" (OpenSSL >= 1.0.2). This is required "
-					"to use DNS-over-HTTPS");
+				if(!http_notls) {
+					log_warn("Unbound is not compiled "
+						"with an OpenSSL version "
+						"supporting ALPN "
+						"(OpenSSL >= 1.0.2). This "
+						"is required to use "
+						"DNS-over-HTTPS");
+				}
 #endif
 #ifndef HAVE_NGHTTP2_NGHTTP2_H
 				log_warn("Unbound is not compiled with "
@@ -1411,14 +1411,25 @@ listen_create(struct comm_base* base, struct listen_port* ports,
 #endif
 			}
 		} else if(ports->ftype == listen_type_udpancil ||
-				  ports->ftype == listen_type_udpancil_dnscrypt)
-			cp = comm_point_create_udp_ancil(base, ports->fd, 
+				  ports->ftype == listen_type_udpancil_dnscrypt) {
+			cp = comm_point_create_udp_ancil(base, ports->fd,
 				front->udp_buff, cb, cb_arg, ports->socket);
+		}
 		if(!cp) {
-			log_err("can't create commpoint");	
+			log_err("can't create commpoint");
 			listen_delete(front);
 			return NULL;
 		}
+		if((http_notls && ports->ftype == listen_type_http) ||
+			(ports->ftype == listen_type_tcp) ||
+			(ports->ftype == listen_type_udp) ||
+			(ports->ftype == listen_type_udpancil) ||
+			(ports->ftype == listen_type_tcp_dnscrypt) ||
+			(ports->ftype == listen_type_udp_dnscrypt) ||
+			(ports->ftype == listen_type_udpancil_dnscrypt))
+			cp->ssl = NULL;
+		else
+			cp->ssl = sslctx;
 		cp->dtenv = dtenv;
 		cp->do_not_close = 1;
 #ifdef USE_DNSCRYPT
@@ -1706,6 +1717,63 @@ listening_ports_open(struct config_file* cfg, char** ifs, int num_ifs,
 	}
 	/* create ip4 and ip6 ports so that return addresses are nice. */
 	if(do_auto || num_ifs == 0) {
+		if(do_auto && cfg->if_automatic_ports &&
+			cfg->if_automatic_ports[0]!=0) {
+			char* now = cfg->if_automatic_ports;
+			while(now && *now) {
+				char* after;
+				int extraport;
+				while(isspace((unsigned char)*now))
+					now++;
+				if(!*now)
+					break;
+				after = now;
+				extraport = (int)strtol(now, &after, 10);
+				if(extraport < 0 || extraport > 65535) {
+					log_err("interface-automatic-ports port number out of range, at position %d of '%s'", (int)(now-cfg->if_automatic_ports)+1, cfg->if_automatic_ports);
+					listening_ports_free(list);
+					return NULL;
+				}
+				if(extraport == 0 && now == after) {
+					log_err("interface-automatic-ports could not be parsed, at position %d of '%s'", (int)(now-cfg->if_automatic_ports)+1, cfg->if_automatic_ports);
+					listening_ports_free(list);
+					return NULL;
+				}
+				now = after;
+				snprintf(portbuf, sizeof(portbuf), "%d", extraport);
+				if(do_ip6) {
+					hints.ai_family = AF_INET6;
+					if(!ports_create_if("::0",
+						do_auto, cfg->do_udp, do_tcp,
+						&hints, portbuf, &list,
+						cfg->so_rcvbuf, cfg->so_sndbuf,
+						cfg->ssl_port, cfg->tls_additional_port,
+						cfg->https_port, reuseport, cfg->ip_transparent,
+						cfg->tcp_mss, cfg->ip_freebind,
+						cfg->http_nodelay, cfg->use_systemd,
+						cfg->dnscrypt_port, cfg->ip_dscp)) {
+						listening_ports_free(list);
+						return NULL;
+					}
+				}
+				if(do_ip4) {
+					hints.ai_family = AF_INET;
+					if(!ports_create_if("0.0.0.0",
+						do_auto, cfg->do_udp, do_tcp,
+						&hints, portbuf, &list,
+						cfg->so_rcvbuf, cfg->so_sndbuf,
+						cfg->ssl_port, cfg->tls_additional_port,
+						cfg->https_port, reuseport, cfg->ip_transparent,
+						cfg->tcp_mss, cfg->ip_freebind,
+						cfg->http_nodelay, cfg->use_systemd,
+						cfg->dnscrypt_port, cfg->ip_dscp)) {
+						listening_ports_free(list);
+						return NULL;
+					}
+				}
+			}
+			return list;
+		}
 		if(do_ip6) {
 			hints.ai_family = AF_INET6;
 			if(!ports_create_if(do_auto?"::0":"::1", 

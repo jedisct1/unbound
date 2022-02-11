@@ -55,6 +55,10 @@ server:
 	# Socket options are not supported on all platforms. experimental.
 	# interface-automatic: no
 
+	# instead of the default port, open additional ports separated by
+	# spaces when interface-automatic is enabled, by listing them here.
+	# interface-automatic-ports: ""
+
 	# port to answer queries from
 	# port: 53
 
@@ -442,7 +446,7 @@ server:
 
 	# Aggressive NSEC uses the DNSSEC NSEC chain to synthesize NXDOMAIN
 	# and other denials, using information from previous NXDOMAINs answers.
-	# aggressive-nsec: no
+	# aggressive-nsec: yes
 
 	# Use 0x20-encoded random bits in the query to foil spoof attempts.
 	# This feature is an experimental implementation of draft dns-0x20.
@@ -860,6 +864,10 @@ server:
 	# 0 blocks when ratelimited, otherwise let 1/xth traffic through
 	# ratelimit-factor: 10
 
+	# Aggressive rate limit when the limit is reached and until demand has
+	# decreased in a 2 second rate window.
+	# ratelimit-backoff: no
+
 	# override the ratelimit for a specific domain name.
 	# give this setting multiple times to have multiple overrides.
 	# ratelimit-for-domain: example.com 1000
@@ -879,6 +887,10 @@ server:
 
 	# 0 blocks when ip is ratelimited, otherwise let 1/xth traffic through
 	# ip-ratelimit-factor: 10
+
+	# Aggressive rate limit when the limit is reached and until demand has
+	# decreased in a 2 second rate window.
+	# ip-ratelimit-backoff: no
 
 	# Limit the number of connections simultaneous from a netblock
 	# tcp-connection-limit: 192.0.2.0/24 12
