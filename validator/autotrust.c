@@ -1203,13 +1203,8 @@ void autr_write_file(struct module_env* env, struct trust_anchor* tp)
 #else
 	llvalue = (unsigned long long)tp;
 #endif
-#ifndef USE_WINSOCK
-	snprintf(tempf, sizeof(tempf), "%s.%d-%d-%llx", fname, (int)getpid(),
+	snprintf(tempf, sizeof(tempf), "%s.%d-%d-" ARG_LL "x", fname, (int)getpid(),
 		env->worker?*(int*)env->worker:0, llvalue);
-#else
-	snprintf(tempf, sizeof(tempf), "%s.%d-%d-%I64x", fname, (int)getpid(),
-		env->worker?*(int*)env->worker:0, llvalue);
-#endif
 #endif /* S_SPLINT_S */
 	verbose(VERB_ALGO, "autotrust: write to disk: %s", tempf);
 	out = fopen(tempf, "w");
@@ -2397,7 +2392,7 @@ probe_anchor(struct module_env* env, struct trust_anchor* tp)
 		qinfo.qclass);
 
 	if(!mesh_new_callback(env->mesh, &qinfo, qflags, &edns, buf, 0, 
-		&probe_answer_cb, env)) {
+		&probe_answer_cb, env, 0)) {
 		log_err("out of memory making 5011 probe");
 	}
 }
