@@ -57,7 +57,7 @@ LEX=@LEX@
 STRIP=@STRIP@
 CC=@CC@
 CPPFLAGS=-I. @CPPFLAGS@
-PYTHON_CPPFLAGS=-I. @PYTHON_CPPFLAGS@
+PYTHON_CPPFLAGS=-I. -I$(srcdir) @PYTHON_CPPFLAGS@
 CFLAGS=-DSRCDIR=$(srcdir) @CFLAGS@
 LDFLAGS=@LDFLAGS@
 LIBS=@LIBS@
@@ -344,7 +344,18 @@ longcheck: longtest
 test:	unittest$(EXEEXT) testbound$(EXEEXT)
 	./unittest$(EXEEXT)
 	./testbound$(EXEEXT) -s
-	for x in $(srcdir)/testdata/*.rpl; do printf "%s" "$$x "; if ./testbound$(EXEEXT) -p $$x >/dev/null 2>&1; then echo OK; else echo failed; exit 1; fi done
+	for x in $(srcdir)/testdata/*.rpl; do \
+		printf "%s" "$$x "; \
+		if ./testbound$(EXEEXT) -p $$x >/dev/null 2>&1; then \
+			echo OK; \
+		else \
+			echo failed; \
+			./testbound$(EXEEXT) -p $$x -o -vvvvv; \
+			printf "%s" "$$x "; \
+			echo failed; \
+			exit 1; \
+		fi; \
+	done
 	@echo test OK
 
 longtest:	tests
@@ -556,7 +567,7 @@ pythonmod-install:
 
 pyunbound-install:
 	$(INSTALL) -m 755 -d $(DESTDIR)$(PYTHON_SITE_PKG)
-	$(INSTALL) -c -m 644 $(srcdir)/libunbound/python/unbound.py $(DESTDIR)$(PYTHON_SITE_PKG)/unbound.py
+	$(INSTALL) -c -m 644 libunbound/python/unbound.py $(DESTDIR)$(PYTHON_SITE_PKG)/unbound.py
 	$(LIBTOOL) --mode=install cp _unbound.la $(DESTDIR)$(PYTHON_SITE_PKG)
 	$(LIBTOOL) --mode=finish $(DESTDIR)$(PYTHON_SITE_PKG)
 

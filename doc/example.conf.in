@@ -815,6 +815,8 @@ server:
 
 	# Add system certs to the cert bundle, from the Windows Cert Store
 	# tls-win-cert: no
+	# and on other systems, the default openssl certificates
+	# tls-system-cert: no
 
 	# Pad queries over TLS upstreams
 	# pad-queries: yes
@@ -900,6 +902,14 @@ server:
 	# fast-server-permil: 0
 	# the number of servers that will be used in the fast server selection.
 	# fast-server-num: 3
+
+	# Enable to attach Extended DNS Error codes (RFC8914) to responses.
+	# ede: no
+
+	# Enable to attach an Extended DNS Error (RFC8914) Code 3 - Stale
+	# Answer as EDNS0 option to expired responses.
+	# Note that the ede option above needs to be enabled for this to work.
+	# ede-serve-expired: no
 
 	# Specific options for ipsecmod. Unbound needs to be configured with
 	# --enable-ipsecmod for these to take effect.
