@@ -186,8 +186,10 @@ struct config_file {
 	size_t infra_cache_slabs;
 	/** max number of hosts in the infra cache */
 	size_t infra_cache_numhosts;
-	/** min value for infra cache rtt */
+	/** min value for infra cache rtt (min retransmit timeout) */
 	int infra_cache_min_rtt;
+	/** max value for infra cache rtt (max retransmit timeout) */
+	int infra_cache_max_rtt;
 	/** keep probing hosts that are down */
 	int infra_keep_probing;
 	/** delay close of udp-timeouted ports, if 0 no delayclose. in msec */
@@ -459,6 +461,16 @@ struct config_file {
 	struct config_str3list* acl_tag_datas;
 	/** list of aclname, view*/
 	struct config_str2list* acl_view;
+	/** list of interface action entries, linked list */
+	struct config_str2list* interface_actions;
+	/** list of interface, tagbitlist */
+	struct config_strbytelist* interface_tags;
+	/** list of interface, tagname, localzonetype */
+	struct config_str3list* interface_tag_actions;
+	/** list of interface, tagname, redirectdata */
+	struct config_str3list* interface_tag_datas;
+	/** list of interface, view*/
+	struct config_str2list* interface_view;
 	/** list of IP-netblock, tagbitlist */
 	struct config_strbytelist* respip_tags;
 	/** list of response-driven access control entries, linked list */
@@ -1260,6 +1272,8 @@ struct config_parser_state {
 	struct config_file* cfg;
 	/** the current chroot dir (or NULL if none) */
 	const char* chroot;
+	/** if we are started in a toplevel, or not, after a force_toplevel */
+	int started_toplevel;
 };
 
 /** global config parser object used during config parsing */

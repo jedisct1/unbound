@@ -173,6 +173,7 @@ config_create(void)
 	cfg->infra_cache_slabs = 4;
 	cfg->infra_cache_numhosts = 10000;
 	cfg->infra_cache_min_rtt = 50;
+	cfg->infra_cache_max_rtt = 120000;
 	cfg->infra_keep_probing = 0;
 	cfg->delay_close = 0;
 	cfg->udp_connect = 1;
@@ -595,8 +596,14 @@ int config_set_option(struct config_file* cfg, const char* opt,
 	else if(strcmp(opt, "cache-min-ttl:") == 0)
 	{ IS_NUMBER_OR_ZERO; cfg->min_ttl = atoi(val); MIN_TTL=(time_t)cfg->min_ttl;}
 	else if(strcmp(opt, "infra-cache-min-rtt:") == 0) {
-	    IS_NUMBER_OR_ZERO; cfg->infra_cache_min_rtt = atoi(val);
-	    RTT_MIN_TIMEOUT=cfg->infra_cache_min_rtt;
+	 	IS_NUMBER_OR_ZERO; cfg->infra_cache_min_rtt = atoi(val);
+		RTT_MIN_TIMEOUT=cfg->infra_cache_min_rtt;
+	}
+	else if(strcmp(opt, "infra-cache-max-rtt:") == 0) {
+		IS_NUMBER_OR_ZERO; cfg->infra_cache_max_rtt = atoi(val);
+		RTT_MAX_TIMEOUT=cfg->infra_cache_max_rtt;
+		USEFUL_SERVER_TOP_TIMEOUT = RTT_MAX_TIMEOUT;
+		BLACKLIST_PENALTY = USEFUL_SERVER_TOP_TIMEOUT*4;
 	}
 	else S_YNO("infra-keep-probing:", infra_keep_probing)
 	else S_NUMBER_OR_ZERO("infra-host-ttl:", host_ttl)
@@ -815,7 +822,7 @@ int config_set_option(struct config_file* cfg, const char* opt,
 		 * stub-ssl-upstream, forward-zone, auth-zone
 		 * name, forward-addr, forward-host,
 		 * ratelimit-for-domain, ratelimit-below-domain,
-		 * local-zone-tag, access-control-view,
+		 * local-zone-tag, access-control-view, interface-*,
 		 * send-client-subnet, client-subnet-always-forward,
 		 * max-client-subnet-ipv4, max-client-subnet-ipv6,
 		 * min-client-subnet-ipv4, min-client-subnet-ipv6,
@@ -1026,6 +1033,7 @@ config_get_option(struct config_file* cfg, const char* opt,
 	else O_DEC(opt, "infra-host-ttl", host_ttl)
 	else O_DEC(opt, "infra-cache-slabs", infra_cache_slabs)
 	else O_DEC(opt, "infra-cache-min-rtt", infra_cache_min_rtt)
+	else O_UNS(opt, "infra-cache-max-rtt", infra_cache_max_rtt)
 	else O_YNO(opt, "infra-keep-probing", infra_keep_probing)
 	else O_MEM(opt, "infra-cache-numhosts", infra_cache_numhosts)
 	else O_UNS(opt, "delay-close", delay_close)
@@ -1244,6 +1252,11 @@ config_get_option(struct config_file* cfg, const char* opt,
 	else O_LS3(opt, "access-control-tag-action", acl_tag_actions)
 	else O_LS3(opt, "access-control-tag-data", acl_tag_datas)
 	else O_LS2(opt, "access-control-view", acl_view)
+	else O_LS2(opt, "interface-action", interface_actions)
+	else O_LTG(opt, "interface-tag", interface_tags)
+	else O_LS3(opt, "interface-tag-action", interface_tag_actions)
+	else O_LS3(opt, "interface-tag-data", interface_tag_datas)
+	else O_LS2(opt, "interface-view", interface_view)
 	else O_YNO(opt, "pad-responses", pad_responses)
 	else O_DEC(opt, "pad-responses-block-size", pad_responses_block_size)
 	else O_YNO(opt, "pad-queries", pad_queries)
@@ -1294,6 +1307,7 @@ create_cfg_parser(struct config_file* cfg, char* filename, const char* chroot)
 	cfg_parser->errors = 0;
 	cfg_parser->cfg = cfg;
 	cfg_parser->chroot = chroot;
+	cfg_parser->started_toplevel = 0;
 	init_cfg_parse();
 }
 
@@ -1598,10 +1612,16 @@ config_delete(struct config_file* cfg)
 	config_deltrplstrlist(cfg->local_zone_overrides);
 	config_del_strarray(cfg->tagname, cfg->num_tags);
 	config_del_strbytelist(cfg->local_zone_tags);
-	config_del_strbytelist(cfg->acl_tags);
 	config_del_strbytelist(cfg->respip_tags);
+	config_deldblstrlist(cfg->acl_view);
+	config_del_strbytelist(cfg->acl_tags);
 	config_deltrplstrlist(cfg->acl_tag_actions);
 	config_deltrplstrlist(cfg->acl_tag_datas);
+	config_deldblstrlist(cfg->interface_actions);
+	config_deldblstrlist(cfg->interface_view);
+	config_del_strbytelist(cfg->interface_tags);
+	config_deltrplstrlist(cfg->interface_tag_actions);
+	config_deltrplstrlist(cfg->interface_tag_datas);
 	config_delstrlist(cfg->control_ifs.first);
 	free(cfg->server_key_file);
 	free(cfg->server_cert_file);
@@ -1792,6 +1812,9 @@ void ub_c_error_msg(const char* fmt, ...)
 void ub_c_error(const char *str)
 {
 	cfg_parser->errors++;
+	if(strcmp(str, "syntax error")==0 && cfg_parser->started_toplevel ==0)
+		str = "syntax error, is there no section start after an "
+			"include-toplevel directive perhaps.";
 	fprintf(stderr, "%s:%d: error: %s\n", cfg_parser->filename,
 		cfg_parser->line, str);
 }
@@ -2222,11 +2245,14 @@ config_apply(struct config_file* config)
 	SERVE_ORIGINAL_TTL = config->serve_original_ttl;
 	MAX_NEG_TTL = (time_t)config->max_negative_ttl;
 	RTT_MIN_TIMEOUT = config->infra_cache_min_rtt;
+	RTT_MAX_TIMEOUT = config->infra_cache_max_rtt;
 	EDNS_ADVERTISED_SIZE = (uint16_t)config->edns_buffer_size;
 	MINIMAL_RESPONSES = config->minimal_responses;
 	RRSET_ROUNDROBIN = config->rrset_roundrobin;
 	LOG_TAG_QUERYREPLY = config->log_tag_queryreply;
 	UNKNOWN_SERVER_NICENESS = config->unknown_server_time_limit;
+	USEFUL_SERVER_TOP_TIMEOUT = RTT_MAX_TIMEOUT;
+	BLACKLIST_PENALTY = USEFUL_SERVER_TOP_TIMEOUT*4;
 	log_set_time_asc(config->log_time_ascii);
 	autr_permit_small_holddown = config->permit_small_holddown;
 	stream_wait_max = config->stream_wait_size;
