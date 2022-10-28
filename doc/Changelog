@@ -1,3 +1,16 @@
+21 October 2022: George
+	- Merge #767 from jonathangray: consistently use IPv4/IPv6 in
+	  unbound.conf.5.
+
+21 October 2022: Wouter
+	- Fix that cachedb does not store failures in the external cache.
+
+18 October 2022: George
+	- Clarify the use of MAX_SENT_COUNT in the iterator code.
+
+17 October 2022: Wouter
+	- testcode/dohclient sets log identity to its name.
+
 14 October 2022: Wouter
 	- Merge #768 from fobser: Arithmetic on a pointer to void is a GNU
 	  extension.
