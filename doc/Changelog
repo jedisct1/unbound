@@ -1,6 +1,35 @@
+13 December 2022: George
+	- Expose 'statistics-inhibit-zero' as a configuration option; the
+	  default value retains Unbound's behavior.
+	- Expose 'max-sent-count' as a configuration option; the
+	  default value retains Unbound's behavior.
+	- Merge #461 from Christian Allred: Add max-query-restarts option.
+	  Exposes an internal configuration but the default value retains
+	  Unbound's behavior.
+
+13 December 2022: Wouter
+	- Merge #808: Wrap Makefile script's directory variables in quotes.
+	- Fix to wrap Makefile scripts directory in quotes for uninstall.
+
+1 December 2022: Wouter
+	- Fix #773: When used with systemd-networkd, unbound does not start
+	  until systemd-networkd-wait-online.service times out.
+
+30 November 2022: George
+	- Add SVCB and HTTPS to the types removed by 'unbound-control flush'.
+	- Clear documentation for interactivity between the subnet module and
+	  the serve-expired and prefetch configuration options.
+
+30 November 2022: Wouter
+	- Fix #782: Segmentation fault in stats.c:404.
+
 28 November 2022: Wouter
 	- Fix for the ignore of tcp events for closed comm points, preserve
 	  the use after free protection features.
+
+23 November 2022: Philip
+	- Merge #720 from jonathangray: fix use after free when
+	  WSACreateEvent() fails.
 
 22 November 2022: George
 	- Ignore expired error responses.
