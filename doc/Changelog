@@ -1,3 +1,27 @@
+13 January 2023: Wouter
+	- Merge #826: Аdd a metric about the maximum number of collisions in
+	  lrushah.
+	- Improve documentation for #826, describe the large collisions amount.
+
+9 January 2023: Wouter
+	- Fix python module install path detection.
+	- Fix python version detection in configure.
+
+6 January 2023: Wouter
+	- Fix #823: Response change to NODATA for some ANY queries since
+	  1.12, tested on 1.16.1.
+	- Fix wildcard in hyperlocal zone service degradation, reported
+	  by Sergey Kacheev. This fix is included in 1.17.1rc2.
+	  That became 1.17.1 on 12 Jan 2023, the code repo continues
+	  with 1.17.2. 1.17.1 excludes fix #823, it is included forwards.
+
+5 January 2023: Wouter
+	- Tag for 1.17.1 release.
+
+2 January 2023: Wouter
+	- Fix windows compile for libunbound subprocess reap comm point closes.
+	- Update github workflows to use checkout v3.
+
 14 December 2022: George
 	- Merge #569 from JINMEI Tatuya: add keep-cache option to
 	  'unbound-control reload' to keep caches.
