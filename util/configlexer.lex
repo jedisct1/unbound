@@ -316,6 +316,7 @@ harden-dnssec-stripped{COLON}	{ YDVAR(1, VAR_HARDEN_DNSSEC_STRIPPED) }
 harden-below-nxdomain{COLON}	{ YDVAR(1, VAR_HARDEN_BELOW_NXDOMAIN) }
 harden-referral-path{COLON}	{ YDVAR(1, VAR_HARDEN_REFERRAL_PATH) }
 harden-algo-downgrade{COLON}	{ YDVAR(1, VAR_HARDEN_ALGO_DOWNGRADE) }
+harden-unknown-additional{COLON}	{ YDVAR(1, VAR_HARDEN_UNKNOWN_ADDITIONAL) }
 use-caps-for-id{COLON}		{ YDVAR(1, VAR_USE_CAPS_FOR_ID) }
 caps-whitelist{COLON}		{ YDVAR(1, VAR_CAPS_WHITELIST) }
 caps-exempt{COLON}		{ YDVAR(1, VAR_CAPS_WHITELIST) }
@@ -554,6 +555,8 @@ backend{COLON}			{ YDVAR(1, VAR_CACHEDB_BACKEND) }
 secret-seed{COLON}		{ YDVAR(1, VAR_CACHEDB_SECRETSEED) }
 redis-server-host{COLON}	{ YDVAR(1, VAR_CACHEDB_REDISHOST) }
 redis-server-port{COLON}	{ YDVAR(1, VAR_CACHEDB_REDISPORT) }
+redis-server-path{COLON}	{ YDVAR(1, VAR_CACHEDB_REDISPATH) }
+redis-server-password{COLON}	{ YDVAR(1, VAR_CACHEDB_REDISPASSWORD) }
 redis-timeout{COLON}		{ YDVAR(1, VAR_CACHEDB_REDISTIMEOUT) }
 redis-expire-records{COLON}	{ YDVAR(1, VAR_CACHEDB_REDISEXPIRERECORDS) }
 ipset{COLON}			{ YDVAR(0, VAR_IPSET) }

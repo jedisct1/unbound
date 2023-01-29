@@ -292,6 +292,9 @@ struct config_file {
 	int harden_referral_path;
 	/** harden against algorithm downgrade */
 	int harden_algo_downgrade;
+	/** harden against unknown records in the authority section and in
+	 * the additional section */
+	int harden_unknown_additional;
 	/** use 0x20 bits in query as random ID bits */
 	int use_caps_bits_for_id;
 	/** 0x20 whitelist, domains that do not use capsforid */
@@ -691,6 +694,10 @@ struct config_file {
 	char* redis_server_host;
 	/** redis server's TCP port */
 	int redis_server_port;
+	/** redis server's unix path. Or "", NULL if unused */
+	char* redis_server_path;
+	/** redis server's AUTH password. Or "", NULL if unused */
+	char* redis_server_password;
 	/** timeout (in ms) for communication with the redis server */
 	int redis_timeout;
 	/** set timeout on redis records based on DNS response ttl */
