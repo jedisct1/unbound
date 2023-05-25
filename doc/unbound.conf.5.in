@@ -505,6 +505,14 @@ configured, and finally to 0 if the number of free buffers falls below
 A minimum actual timeout of 200 milliseconds is observed regardless of the
 advertised timeout.
 .TP
+.B sock\-queue\-timeout: \fI<sec>\fR
+UDP queries that have waited in the socket buffer for a long time can be
+dropped. Default is 0, disabled. The time is set in seconds, 3 could be a
+good value to ignore old queries that likely the client does not need a reply
+for any more. This could happen if the host has not been able to service
+the queries for a while, i.e. Unbound is not running, and then is enabled
+again. It uses timestamp socket options.
+.TP
 .B tcp\-upstream: \fI<yes or no>
 Enable or disable whether the upstream queries use TCP only for transport.
 Default is no.  Useful in tunneling scenarios. If set to no you can specify
@@ -2304,6 +2312,21 @@ List domain for which the AAAA records are ignored and the A record is
 used by dns64 processing instead.  Can be entered multiple times, list a
 new domain for which it applies, one per line.  Applies also to names
 underneath the name given.
+.SS "NAT64 Operation"
+.LP
+NAT64 operation allows using a NAT64 prefix for outbound requests to IPv4-only
+servers.  It is controlled by two options in the \fBserver:\fR section:
+.TP
+.B do\-nat64: \fI<yes or no>\fR
+Use NAT64 to reach IPv4-only servers.
+Consider also enabling \fBprefer\-ip6\fR to prefer native IPv6 connections to
+nameservers.
+Default no.
+.TP
+.B nat64\-prefix: \fI<IPv6 prefix>\fR
+Use a specific NAT64 prefix to reach IPv4-only servers.  Defaults to using
+the prefix configured in \fBdns64\-prefix\fR, which in turn defaults to
+64:ff9b::/96.  The prefix length must be one of /32, /40, /48, /56, /64 or /96.
 .SS "DNSCrypt Options"
 .LP
 The

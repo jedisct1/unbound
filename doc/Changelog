@@ -1,3 +1,72 @@
+25 May 2023: Wouter
+	- Fix unbound-dnstap-socket printout when no query is present.
+	- Fix unbound-dnstap-socket time fraction conversion for printout.
+
+19 May 2023: Wouter
+	- Fix RPZ removal of client-ip, nsip, nsdname triggers from IXFR.
+	- Fix to remove unused variables from RPZ clientip data structure.
+
+16 May 2023: Wouter
+	- Fix #888: [FR] Use kernel timestamps for dnstap.
+	- Fix to print debug log for ancillary data with correct IP address.
+
+11 May 2023: Wouter
+	- Fix warning in windows compile, in set_recvtimestamp.
+
+4 May 2023: Wouter
+	- Fix #885: Error: util/configlexer.c: No such file or directory,
+	  adds error messages explaining to install flex and bison.
+	- Fix to remove unused whitespace from acx_nlnetlabs.m4 and config.h.
+	- Fix doxygen in addr_to_nat64 header definition.
+
+1 May 2023: George
+	- Merge #722 from David 'eqvinox' Lamparter: NAT64 support.
+	- For #722: minor fixes, formatting, refactoring.
+
+1 May 2023: Wouter
+	- Fix RPZ IP responses with trigger rpz-drop on cache entries, that
+	  they are dropped.
+
+26 April 2023: Philip
+	- Fix issue #860: Bad interaction with 0 TTL records and serve-expired
+
+26 April 2023: Wouter
+	- Merge #882 from vvfedorenko: Features/dropqueuedpackets, with
+	  sock-queue-timeout option that drops packets that have been in the
+	  socket queue for too long. Added statistics num.queries_timed_out
+	  and query.queue_time_us.max that track the socket queue timeouts.
+	- Fix for #882: small changes, date updated in Copyright for
+	  util/timeval_func.c and util/timeval_func.h. Man page entries and
+	  example entry.
+	- Fix for #882: document variable to stop doxygen warning.
+
+19 April 2023: Wouter
+	- Fix for #878: Invalid IP address in unbound.conf causes Segmentation
+	  Fault on OpenBSD.
+
+14 April 2023: Wouter
+	- Merge #875: change obsolete txt URL in unbound-anchor.c to point
+	  to RFC 7958, and Fix #874.
+
+13 April 2023: Wouter
+	- Fix build badge, from failing travis link to github ci action link.
+
+6 April 2023: Wouter
+	- Fix for #870: Add test case for the qname minimisation and CNAME.
+
+4 April 2023: Wouter
+	- Fix #870: NXDOMAIN instead of NOERROR rcode when asked for existing
+	  CNAME record.
+
+24 March 2023: Philip
+	- Fix issue #676: Unencrypted query is sent when
+	  forward-tls-upstream: yes is used without tls-cert-bundle
+	- Extra consistency check to make sure that when TLS is requested,
+	  either we set up a TLS connection or we return an error.
+
+21 March 2023: Philip
+	- Fix issue #851: reserved identifier violation 
+
 20 March 2023: Wouter
 	- iana portlist update.
 
