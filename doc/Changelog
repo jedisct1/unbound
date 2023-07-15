@@ -1,3 +1,67 @@
+14 July 2023: George
+	- More clear description of the different auth-zone behaviors on the
+	  man page.
+
+13 July 2023: George
+	- Merge #880 from chipitsine: services/authzone.c: remove redundant
+	  check.
+
+11 July 2023: George
+	- Merge #664 from tilan7763: Add prefetch support for subnet cache
+	  entries.
+	- For #664: Easier code flow for subnetcache prefetching.
+	- For #664: Add testcase.
+	- For #664: Rename subnet_prefetch tests to subnet_global_prefetch to
+	  differentiate from the new subnet prefetch support.
+
+3 July 2023: George
+	- Merge #739: Add SVCB dohpath support.
+	- Code cleanup for sldns_str2wire_svcparam_key_lookup.
+	- Merge #802: add validation EDEs to queries where the CD bit is set.
+	- For #802: Cleanup comments and add RCODE check for CD bit test case.
+	- Skip the 00-lint test. splint is not maintained; it either does not
+	  work or produces false positives. Static analysis is handled in the
+	  clang test.
+
+3 July 2023: Wouter
+	- Fix #906: warning: ‘Py_SetProgramName’ is deprecated.
+	- Fix dereference of NULL variable warning in mesh_do_callback.
+
+29 June 2023: George
+	- More fixes for reference counting for python module and clean up
+	  failure code.
+	- Merge #827 from rcmcdonald91: Eliminate unnecessary Python reloading
+	  which causes memory leaks.
+
+29 June 2023: Wouter
+	- Fix python modules with multiple scripts, by incrementing reference
+	  counts.
+
+27 June 2023: George
+	- Merge #892: Add cachedb hit stat. Introduces 'num.query.cachedb' as
+	  a new statistical counter.
+	- Remove warning about unknown cast-function-type warning pragma.
+
+22 June 2023: Wouter
+	- Merge #903: contrib: add yocto compatible init script.
+
+15 June 2023: Philip
+	- Fix for issue #887 (Timeouts to forward servers on BSD based
+	  system with ASLR)
+	- Probably fixes #516 (Stream reuse does not work on Windows) as well
+
+14 June 2023: George
+	- Properly handle all return values of worker_check_request during
+	  early EDE code.
+	- Do not check the incoming request more than once.
+
+12 June 2023: Wouter
+	- Merge #896: Fix: #895: pythonmodule: add all site-packages
+	  directories to sys.path.
+	- Fix #895: python + sysconfig gives ANOTHER path comparing to
+	  distutils.
+	- Fix for uncertain unit test for doh buffer size events.
+
 25 May 2023: Wouter
 	- Fix unbound-dnstap-socket printout when no query is present.
 	- Fix unbound-dnstap-socket time fraction conversion for printout.

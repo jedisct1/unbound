@@ -206,6 +206,7 @@ mesh_create(struct module_stack* stack, struct module_env* env)
 	mesh->stats_jostled = 0;
 	mesh->stats_dropped = 0;
 	mesh->ans_expired = 0;
+	mesh->ans_cachedb = 0;
 	mesh->max_reply_states = env->cfg->num_queries_per_thread;
 	mesh->max_forever_states = (mesh->max_reply_states+1)/2;
 #ifndef S_SPLINT_S
@@ -704,7 +705,7 @@ static void mesh_schedule_prefetch(struct mesh_area* mesh,
  * attached its own ECS data. */
 static void mesh_schedule_prefetch_subnet(struct mesh_area* mesh,
 	struct query_info* qinfo, uint16_t qflags, time_t leeway, int run,
-	int rpz_passthru, struct comm_reply* rep, struct edns_option* edns_list)
+	int rpz_passthru, struct sockaddr_storage* addr, struct edns_option* edns_list)
 {
 	struct mesh_state* s = NULL;
 	struct edns_option* opt = NULL;
@@ -737,7 +738,7 @@ static void mesh_schedule_prefetch_subnet(struct mesh_area* mesh,
 		/* Store the client's address. Later in the subnet module,
 		 * it is decided whether to include an ECS option or not.
 		 */
-		s->s.client_addr =  rep->client_addr;
+		s->s.client_addr =  *addr;
 	}
 #ifdef UNBOUND_DEBUG
 	n =
@@ -784,14 +785,14 @@ static void mesh_schedule_prefetch_subnet(struct mesh_area* mesh,
 
 void mesh_new_prefetch(struct mesh_area* mesh, struct query_info* qinfo,
 	uint16_t qflags, time_t leeway, int rpz_passthru,
-	struct comm_reply* rep, struct edns_option* opt_list)
+	struct sockaddr_storage* addr, struct edns_option* opt_list)
 {
+	(void)addr;
 	(void)opt_list;
-	(void)rep;
 #ifdef CLIENT_SUBNET
-	if(rep)
+	if(addr)
 		mesh_schedule_prefetch_subnet(mesh, qinfo, qflags, leeway, 1,
-			rpz_passthru, rep, opt_list);
+			rpz_passthru, addr, opt_list);
 	else
 #endif
 		mesh_schedule_prefetch(mesh, qinfo, qflags, leeway, 1,
@@ -1172,7 +1173,7 @@ mesh_do_callback(struct mesh_state* m, int rcode, struct reply_info* rep,
 	else	secure = 0;
 	if(!rep && rcode == LDNS_RCODE_NOERROR)
 		rcode = LDNS_RCODE_SERVFAIL;
-	if(!rcode && (rep->security == sec_status_bogus ||
+	if(!rcode && rep && (rep->security == sec_status_bogus ||
 		rep->security == sec_status_secure_sentinel_fail)) {
 		if(!(reason = errinf_to_str_bogus(&m->s)))
 			rcode = LDNS_RCODE_SERVFAIL;
@@ -1212,7 +1213,8 @@ mesh_do_callback(struct mesh_state* m, int rcode, struct reply_info* rep,
 		} else {
 			fptr_ok(fptr_whitelist_mesh_cb(r->cb));
 			(*r->cb)(r->cb_arg, LDNS_RCODE_NOERROR, r->buf,
-				rep->security, reason, was_ratelimited);
+				(rep?rep->security:sec_status_unchecked),
+				reason, was_ratelimited);
 		}
 	}
 	free(reason);
@@ -1234,6 +1236,34 @@ mesh_is_rpz_respip_tcponly_action(struct mesh_state const* m)
 static inline int
 mesh_is_udp(struct mesh_reply const* r) {
 	return r->query_reply.c->type == comm_udp;
+}
+
+static inline void
+mesh_find_and_attach_ede_and_reason(struct mesh_state* m,
+	struct reply_info* rep, struct mesh_reply* r) {
+	char *reason = m->s.env->cfg->val_log_level >= 2
+		? errinf_to_str_bogus(&m->s) : NULL;
+
+	/* During validation the EDE code can be received via two
+	 * code paths. One code path fills the reply_info EDE, and
+	 * the other fills it in the errinf_strlist. These paths
+	 * intersect at some points, but where is opaque due to
+	 * the complexity of the validator. At the time of writing
+	 * we make the choice to prefer the EDE from errinf_strlist
+	 * but a compelling reason to do otherwise is just as valid
+	 */
+	sldns_ede_code reason_bogus = errinf_to_reason_bogus(&m->s);
+	if ((reason_bogus == LDNS_EDE_DNSSEC_BOGUS &&
+		rep->reason_bogus != LDNS_EDE_NONE) ||
+		reason_bogus == LDNS_EDE_NONE) {
+			reason_bogus = rep->reason_bogus;
+	}
+
+	if(reason_bogus != LDNS_EDE_NONE) {
+		edns_opt_list_append_ede(&r->edns.opt_list_out,
+			m->s.region, reason_bogus, reason);
+	}
+	free(reason);
 }
 
 /**
@@ -1327,35 +1357,14 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 				&r->edns, &r->query_reply, m->s.region, &r->start_time))
 					r->edns.opt_list_inplace_cb_out = NULL;
 		}
-		/* Send along EDE BOGUS EDNS0 option when answer is bogus */
+		/* Send along EDE BOGUS EDNS0 option when validation is bogus */
 		if(m->s.env->cfg->ede && rcode == LDNS_RCODE_SERVFAIL &&
 			m->s.env->need_to_validate && (!(r->qflags&BIT_CD) ||
 			m->s.env->cfg->ignore_cd) && rep &&
 			(rep->security <= sec_status_bogus ||
 			rep->security == sec_status_secure_sentinel_fail)) {
-			char *reason = m->s.env->cfg->val_log_level >= 2
-				? errinf_to_str_bogus(&m->s) : NULL;
-
-			/* During validation the EDE code can be received via two
-			 * code paths. One code path fills the reply_info EDE, and
-			 * the other fills it in the errinf_strlist. These paths
-			 * intersect at some points, but where is opaque due to
-			 * the complexity of the validator. At the time of writing
-			 * we make the choice to prefer the EDE from errinf_strlist
-			 * but a compelling reason to do otherwise is just as valid
-			 */
-			sldns_ede_code reason_bogus = errinf_to_reason_bogus(&m->s);
-			if ((reason_bogus == LDNS_EDE_DNSSEC_BOGUS &&
-				rep->reason_bogus != LDNS_EDE_NONE) ||
-				reason_bogus == LDNS_EDE_NONE) {
-					reason_bogus = rep->reason_bogus;
-			}
-
-			if(reason_bogus != LDNS_EDE_NONE) {
-				edns_opt_list_append_ede(&r->edns.opt_list_out,
-					m->s.region, reason_bogus, reason);
-			}
-			free(reason);
+			
+			mesh_find_and_attach_ede_and_reason(m, rep, r);
 		}
 		error_encode(r_buffer, rcode, &m->s.qinfo, r->qid,
 			r->qflags, &r->edns);
@@ -1370,6 +1379,14 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 		r->edns.bits &= EDNS_DO;
 		m->s.qinfo.qname = r->qname;
 		m->s.qinfo.local_alias = r->local_alias;
+
+		/* Attach EDE without servfail if the validation failed */
+		if (m->s.env->cfg->ede && rep && 
+			(rep->security <= sec_status_bogus ||
+			rep->security == sec_status_secure_sentinel_fail)) {
+			mesh_find_and_attach_ede_and_reason(m, rep, r);
+		}
+
 		if(!inplace_cb_reply_call(m->s.env, &m->s.qinfo, &m->s, rep,
 			LDNS_RCODE_NOERROR, &r->edns, &r->query_reply, m->s.region, &r->start_time) ||
 			!reply_info_answer_encode(&m->s.qinfo, rep, r->qid,
@@ -1424,6 +1441,7 @@ void mesh_query_done(struct mesh_state* mstate)
 	struct reply_info* rep = (mstate->s.return_msg?
 		mstate->s.return_msg->rep:NULL);
 	struct timeval tv = {0, 0};
+	int i = 0;
 	/* No need for the serve expired timer anymore; we are going to reply. */
 	if(mstate->s.serve_expired_data) {
 		comm_timer_delete(mstate->s.serve_expired_data->timer);
@@ -1443,6 +1461,7 @@ void mesh_query_done(struct mesh_state* mstate)
 		}
 	}
 	for(r = mstate->reply_list; r; r = r->next) {
+		i++;
 		tv = r->start_time;
 
 		/* if a response-ip address block has been stored the
@@ -1454,16 +1473,6 @@ void mesh_query_done(struct mesh_state* mstate)
 				mstate->s.qinfo.qclass, r->local_alias,
 				&r->query_reply.client_addr,
 				r->query_reply.client_addrlen);
-			if(mstate->s.env->cfg->stat_extended &&
-				mstate->s.respip_action_info->rpz_used) {
-				if(mstate->s.respip_action_info->rpz_disabled)
-					mstate->s.env->mesh->rpz_action[RPZ_DISABLED_ACTION]++;
-				if(mstate->s.respip_action_info->rpz_cname_override)
-					mstate->s.env->mesh->rpz_action[RPZ_CNAME_OVERRIDE_ACTION]++;
-				else
-					mstate->s.env->mesh->rpz_action[respip_action_to_rpz_action(
-						mstate->s.respip_action_info->action)]++;
-			}
 		}
 
 		/* if this query is determined to be dropped during the
@@ -1494,6 +1503,27 @@ void mesh_query_done(struct mesh_state* mstate)
 			prev_buffer = r_buffer;
 		}
 	}
+	/* Account for each reply sent. */
+	if(i > 0 && mstate->s.respip_action_info &&
+		mstate->s.respip_action_info->addrinfo &&
+		mstate->s.env->cfg->stat_extended &&
+		mstate->s.respip_action_info->rpz_used) {
+		if(mstate->s.respip_action_info->rpz_disabled)
+			mstate->s.env->mesh->rpz_action[RPZ_DISABLED_ACTION] += i;
+		if(mstate->s.respip_action_info->rpz_cname_override)
+			mstate->s.env->mesh->rpz_action[RPZ_CNAME_OVERRIDE_ACTION] += i;
+		else
+			mstate->s.env->mesh->rpz_action[respip_action_to_rpz_action(
+				mstate->s.respip_action_info->action)] += i;
+	}
+	if(!mstate->s.is_drop && i > 0) {
+		if(mstate->s.env->cfg->stat_extended
+			&& mstate->s.is_cachedb_answer) {
+			mstate->s.env->mesh->ans_cachedb += i;
+		}
+	}
+
+	/* Mesh area accounting */
 	if(mstate->reply_list) {
 		mstate->reply_list = NULL;
 		if(!mstate->reply_list && !mstate->cb_list) {
@@ -1506,6 +1536,7 @@ void mesh_query_done(struct mesh_state* mstate)
 			mstate->s.env->mesh->num_detached_states++;
 	}
 	mstate->replies_sent = 1;
+
 	while((c = mstate->cb_list) != NULL) {
 		/* take this cb off the list; so that the list can be
 		 * changed, eg. by adds from the callback routine */
@@ -1763,8 +1794,20 @@ mesh_continue(struct mesh_area* mesh, struct mesh_state* mstate,
 	if(s == module_finished) {
 		if(mstate->s.curmod == 0) {
 			struct query_info* qinfo = NULL;
+			struct edns_option* opt_list = NULL;
+			struct sockaddr_storage addr;
 			uint16_t qflags;
 			int rpz_p = 0;
+
+#ifdef CLIENT_SUBNET
+			struct edns_option* ecs;
+			if(mstate->s.need_refetch && mstate->reply_list &&
+				modstack_find(&mesh->mods, "subnetcache") != -1 &&
+				mstate->s.env->unique_mesh) {
+				addr = mstate->reply_list->query_reply.client_addr;
+			} else
+#endif
+				memset(&addr, 0, sizeof(addr));
 
 			mesh_query_done(mstate);
 			mesh_walk_supers(mesh, mstate);
@@ -1775,13 +1818,28 @@ mesh_continue(struct mesh_area* mesh, struct mesh_state* mstate,
 			 * we need to make a copy of the query info here. */
 			if(mstate->s.need_refetch) {
 				mesh_copy_qinfo(mstate, &qinfo, &qflags);
+#ifdef CLIENT_SUBNET
+				/* Make also a copy of the ecs option if any */
+				if((ecs = edns_opt_list_find(
+					mstate->s.edns_opts_front_in,
+					mstate->s.env->cfg->client_subnet_opcode)) != NULL) {
+					(void)edns_opt_list_append(&opt_list,
+						ecs->opt_code, ecs->opt_len,
+						ecs->opt_data,
+						mstate->s.env->scratch);
+				}
+#endif
 				rpz_p = mstate->s.rpz_passthru;
 			}
 
-			mesh_state_delete(&mstate->s);
 			if(qinfo) {
-				mesh_schedule_prefetch(mesh, qinfo, qflags,
-					0, 1, rpz_p);
+				mesh_state_delete(&mstate->s);
+				mesh_new_prefetch(mesh, qinfo, qflags, 0,
+					rpz_p,
+					addr.ss_family!=AF_UNSPEC?&addr:NULL,
+					opt_list);
+			} else {
+				mesh_state_delete(&mstate->s);
 			}
 			return 0;
 		}
@@ -1889,6 +1947,7 @@ mesh_stats_clear(struct mesh_area* mesh)
 	mesh->ans_secure = 0;
 	mesh->ans_bogus = 0;
 	mesh->ans_expired = 0;
+	mesh->ans_cachedb = 0;
 	memset(&mesh->ans_rcode[0], 0, sizeof(size_t)*UB_STATS_RCODE_NUM);
 	memset(&mesh->rpz_action[0], 0, sizeof(size_t)*UB_STATS_RPZ_ACTION_NUM);
 	mesh->ans_nodata = 0;
@@ -2025,6 +2084,7 @@ mesh_serve_expired_callback(void* arg)
 	struct timeval tv = {0, 0};
 	int must_validate = (!(qstate->query_flags&BIT_CD)
 		|| qstate->env->cfg->ignore_cd) && qstate->env->need_to_validate;
+	int i = 0;
 	if(!qstate->serve_expired_data) return;
 	verbose(VERB_ALGO, "Serve expired: Trying to reply with expired data");
 	comm_timer_delete(qstate->serve_expired_data->timer);
@@ -2096,6 +2156,7 @@ mesh_serve_expired_callback(void* arg)
 		log_dns_msg("Serve expired lookup", &qstate->qinfo, msg->rep);
 
 	for(r = mstate->reply_list; r; r = r->next) {
+		i++;
 		tv = r->start_time;
 
 		/* If address info is returned, it means the action should be an
@@ -2105,16 +2166,6 @@ mesh_serve_expired_callback(void* arg)
 				qstate->qinfo.qtype, qstate->qinfo.qclass,
 				r->local_alias, &r->query_reply.client_addr,
 				r->query_reply.client_addrlen);
-
-			if(qstate->env->cfg->stat_extended && actinfo.rpz_used) {
-				if(actinfo.rpz_disabled)
-					qstate->env->mesh->rpz_action[RPZ_DISABLED_ACTION]++;
-				if(actinfo.rpz_cname_override)
-					qstate->env->mesh->rpz_action[RPZ_CNAME_OVERRIDE_ACTION]++;
-				else
-					qstate->env->mesh->rpz_action[
-						respip_action_to_rpz_action(actinfo.action)]++;
-			}
 		}
 
 		/* Add EDE Stale Answer (RCF8914). Ignore global ede as this is
@@ -2134,11 +2185,23 @@ mesh_serve_expired_callback(void* arg)
 			tcp_req_info_remove_mesh_state(r->query_reply.c->tcp_req_info, mstate);
 		prev = r;
 		prev_buffer = r_buffer;
-
-		/* Account for each reply sent. */
-		mesh->ans_expired++;
-
 	}
+	/* Account for each reply sent. */
+	if(i > 0) {
+		mesh->ans_expired += i;
+		if(actinfo.addrinfo && qstate->env->cfg->stat_extended &&
+			actinfo.rpz_used) {
+			if(actinfo.rpz_disabled)
+				qstate->env->mesh->rpz_action[RPZ_DISABLED_ACTION] += i;
+			if(actinfo.rpz_cname_override)
+				qstate->env->mesh->rpz_action[RPZ_CNAME_OVERRIDE_ACTION] += i;
+			else
+				qstate->env->mesh->rpz_action[
+					respip_action_to_rpz_action(actinfo.action)] += i;
+		}
+	}
+
+	/* Mesh area accounting */
 	if(mstate->reply_list) {
 		mstate->reply_list = NULL;
 		if(!mstate->reply_list && !mstate->cb_list) {
@@ -2149,6 +2212,7 @@ mesh_serve_expired_callback(void* arg)
 			}
 		}
 	}
+
 	while((c = mstate->cb_list) != NULL) {
 		/* take this cb off the list; so that the list can be
 		 * changed, eg. by adds from the callback routine */
