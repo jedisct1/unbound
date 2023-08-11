@@ -1121,7 +1121,7 @@ generate_a_aaaa_check(struct module_qstate* qstate, struct iter_qstate* iq,
  * Generate a NS check request to obtain authoritative information
  * on an NS rrset.
  *
- * @param qstate: the qtstate that triggered the need to prime.
+ * @param qstate: the qstate that triggered the need to prime.
  * @param iq: iterator query state.
  * @param id: module id.
  */
@@ -3825,6 +3825,9 @@ processFinished(struct module_qstate* qstate, struct iter_qstate* iq,
 
 	/* make sure QR flag is on */
 	iq->response->rep->flags |= BIT_QR;
+
+	/* explicitly set the EDE string to NULL */
+	iq->response->rep->reason_bogus_str = NULL;
 
 	/* we have finished processing this query */
 	qstate->ext_state[id] = module_finished;

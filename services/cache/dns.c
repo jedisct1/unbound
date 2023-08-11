@@ -157,7 +157,7 @@ dns_cache_store_msg(struct module_env* env, struct query_info* qinfo,
 		/* we do not store the message, but we did store the RRs,
 		 * which could be useful for delegation information */
 		verbose(VERB_ALGO, "TTL 0: dropped msg from cache");
-		free(rep);
+		reply_info_delete(rep, NULL);
 		/* if the message is in the cache, remove that msg,
 		 * so that the TTL 0 response can be returned for future
 		 * responses (i.e. don't get answered from
@@ -592,6 +592,7 @@ gen_dns_msg(struct regional* region, struct query_info* q, size_t num)
 	if(!msg->rep)
 		return NULL;
 	msg->rep->reason_bogus = LDNS_EDE_NONE;
+	msg->rep->reason_bogus_str = NULL;
 	if(num > RR_COUNT_MAX)
 		return NULL; /* integer overflow protection */
 	msg->rep->rrsets = (struct ub_packed_rrset_key**)
@@ -654,6 +655,10 @@ tomsg(struct module_env* env, struct query_info* q, struct reply_info* r,
 	msg->rep->rrset_count = r->rrset_count;
 	msg->rep->authoritative = r->authoritative;
 	msg->rep->reason_bogus = r->reason_bogus;
+	if(r->reason_bogus_str) {
+		msg->rep->reason_bogus_str = regional_strdup(region, r->reason_bogus_str);
+	}
+
 	if(!rrset_array_lock(r->ref, r->rrset_count, now_control)) {
 		return NULL;
 	}
@@ -1057,7 +1062,6 @@ dns_cache_store(struct module_env* env, struct query_info* msgqinf,
 	/* ttl must be relative ;i.e. 0..86400 not  time(0)+86400.
 	 * the env->now is added to message and RRsets in this routine. */
 	/* the leeway is used to invalidate other rrsets earlier */
-
 	if(is_referral) {
 		/* store rrsets */
 		struct rrset_ref ref;
@@ -1074,7 +1078,7 @@ dns_cache_store(struct module_env* env, struct query_info* msgqinf,
 				((ntohs(ref.key->rk.type)==LDNS_RR_TYPE_NS
 				 && !pside) ? qstarttime:*env->now + leeway));
 		}
-		free(rep);
+		reply_info_delete(rep, NULL);
 		return 1;
 	} else {
 		/* store msg, and rrsets */

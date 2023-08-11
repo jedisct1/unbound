@@ -449,6 +449,8 @@ void mesh_new_client(struct mesh_area* mesh, struct query_info* qinfo,
 			comm_point_send_reply(rep);
 			return;
 		}
+		/* set detached (it is now) */
+		mesh->num_detached_states++;
 		if(unique)
 			mesh_state_make_unique(s);
 		s->s.rpz_passthru = rpz_passthru;
@@ -457,13 +459,14 @@ void mesh_new_client(struct mesh_area* mesh, struct query_info* qinfo,
 			s->s.edns_opts_front_in = edns_opt_copy_region(edns->opt_list_in,
 				s->s.region);
 			if(!s->s.edns_opts_front_in) {
-				log_err("mesh_state_create: out of memory; SERVFAIL");
+				log_err("edns_opt_copy_region: out of memory; SERVFAIL");
 				if(!inplace_cb_reply_servfail_call(mesh->env, qinfo, NULL,
 					NULL, LDNS_RCODE_SERVFAIL, edns, rep, mesh->env->scratch, mesh->env->now_tv))
 						edns->opt_list_inplace_cb_out = NULL;
 				error_encode(r_buffer, LDNS_RCODE_SERVFAIL,
 					qinfo, qid, qflags, edns);
 				comm_point_send_reply(rep);
+				mesh_state_delete(&s->s);
 				return;
 			}
 		}
@@ -475,8 +478,6 @@ void mesh_new_client(struct mesh_area* mesh, struct query_info* qinfo,
 #endif
 		rbtree_insert(&mesh->all, &s->node);
 		log_assert(n != NULL);
-		/* set detached (it is now) */
-		mesh->num_detached_states++;
 		added = 1;
 	}
 	if(!s->reply_list && !s->cb_list) {
@@ -569,6 +570,8 @@ mesh_new_callback(struct mesh_area* mesh, struct query_info* qinfo,
 		if(!s) {
 			return 0;
 		}
+		/* set detached (it is now) */
+		mesh->num_detached_states++;
 		if(unique)
 			mesh_state_make_unique(s);
 		s->s.rpz_passthru = rpz_passthru;
@@ -576,6 +579,7 @@ mesh_new_callback(struct mesh_area* mesh, struct query_info* qinfo,
 			s->s.edns_opts_front_in = edns_opt_copy_region(edns->opt_list_in,
 				s->s.region);
 			if(!s->s.edns_opts_front_in) {
+				mesh_state_delete(&s->s);
 				return 0;
 			}
 		}
@@ -586,8 +590,6 @@ mesh_new_callback(struct mesh_area* mesh, struct query_info* qinfo,
 #endif
 		rbtree_insert(&mesh->all, &s->node);
 		log_assert(n != NULL);
-		/* set detached (it is now) */
-		mesh->num_detached_states++;
 		added = 1;
 	}
 	if(!s->reply_list && !s->cb_list) {
@@ -604,6 +606,8 @@ mesh_new_callback(struct mesh_area* mesh, struct query_info* qinfo,
 	}
 	/* add serve expired timer if not already there */
 	if(timeout && !mesh_serve_expired_init(s, timeout)) {
+		if(added)
+			mesh_state_delete(&s->s);
 		return 0;
 	}
 	/* update statistics */
@@ -890,12 +894,6 @@ mesh_state_create(struct module_env* env, struct query_info* qinfo,
 	mstate->s.edns_opts_front_out = NULL;
 
 	return mstate;
-}
-
-int
-mesh_state_is_unique(struct mesh_state* mstate)
-{
-	return mstate->unique != NULL;
 }
 
 void
@@ -1234,36 +1232,34 @@ mesh_is_rpz_respip_tcponly_action(struct mesh_state const* m)
 }
 
 static inline int
-mesh_is_udp(struct mesh_reply const* r) {
+mesh_is_udp(struct mesh_reply const* r)
+{
 	return r->query_reply.c->type == comm_udp;
 }
 
 static inline void
 mesh_find_and_attach_ede_and_reason(struct mesh_state* m,
-	struct reply_info* rep, struct mesh_reply* r) {
-	char *reason = m->s.env->cfg->val_log_level >= 2
-		? errinf_to_str_bogus(&m->s) : NULL;
-
-	/* During validation the EDE code can be received via two
+	struct reply_info* rep, struct mesh_reply* r)
+{
+	/* OLD note:
+	 * During validation the EDE code can be received via two
 	 * code paths. One code path fills the reply_info EDE, and
 	 * the other fills it in the errinf_strlist. These paths
 	 * intersect at some points, but where is opaque due to
 	 * the complexity of the validator. At the time of writing
 	 * we make the choice to prefer the EDE from errinf_strlist
 	 * but a compelling reason to do otherwise is just as valid
+	 * NEW note:
+	 * The compelling reason is that with caching support, the value
+	 * in the reply_info is cached.
+	 * The reason members of the reply_info struct should be
+	 * updated as they are already cached. No reason to
+	 * try and find the EDE information in errinf anymore.
 	 */
-	sldns_ede_code reason_bogus = errinf_to_reason_bogus(&m->s);
-	if ((reason_bogus == LDNS_EDE_DNSSEC_BOGUS &&
-		rep->reason_bogus != LDNS_EDE_NONE) ||
-		reason_bogus == LDNS_EDE_NONE) {
-			reason_bogus = rep->reason_bogus;
-	}
-
-	if(reason_bogus != LDNS_EDE_NONE) {
+	if(rep->reason_bogus != LDNS_EDE_NONE) {
 		edns_opt_list_append_ede(&r->edns.opt_list_out,
-			m->s.region, reason_bogus, reason);
+			m->s.region, rep->reason_bogus, rep->reason_bogus_str);
 	}
-	free(reason);
 }
 
 /**
@@ -1357,13 +1353,11 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 				&r->edns, &r->query_reply, m->s.region, &r->start_time))
 					r->edns.opt_list_inplace_cb_out = NULL;
 		}
-		/* Send along EDE BOGUS EDNS0 option when validation is bogus */
-		if(m->s.env->cfg->ede && rcode == LDNS_RCODE_SERVFAIL &&
-			m->s.env->need_to_validate && (!(r->qflags&BIT_CD) ||
-			m->s.env->cfg->ignore_cd) && rep &&
-			(rep->security <= sec_status_bogus ||
-			rep->security == sec_status_secure_sentinel_fail)) {
-			
+		/* Send along EDE EDNS0 option when SERVFAILing; usually
+		 * DNSSEC validation failures */
+		/* Since we are SERVFAILing here, CD bit and rep->security
+		 * is already handled. */
+		if(m->s.env->cfg->ede && rep) {
 			mesh_find_and_attach_ede_and_reason(m, rep, r);
 		}
 		error_encode(r_buffer, rcode, &m->s.qinfo, r->qid,
@@ -1380,8 +1374,10 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 		m->s.qinfo.qname = r->qname;
 		m->s.qinfo.local_alias = r->local_alias;
 
-		/* Attach EDE without servfail if the validation failed */
-		if (m->s.env->cfg->ede && rep && 
+		/* Attach EDE without SERVFAIL if the validation failed.
+		 * Need to explicitly check for rep->security otherwise failed
+		 * validation paths may attach to a secure answer. */
+		if(m->s.env->cfg->ede && rep &&
 			(rep->security <= sec_status_bogus ||
 			rep->security == sec_status_secure_sentinel_fail)) {
 			mesh_find_and_attach_ede_and_reason(m, rep, r);

@@ -102,7 +102,6 @@ static int
 testframe_init(struct module_env* env, struct cachedb_env* cachedb_env)
 {
 	struct testframe_moddata* d;
-	(void)env;
 	verbose(VERB_ALGO, "testframe_init");
 	d = (struct testframe_moddata*)calloc(1,
 		sizeof(struct testframe_moddata));
@@ -412,6 +411,14 @@ prep_data(struct module_qstate* qstate, struct sldns_buffer* buf)
 	if(qstate->return_msg->rep->ttl == 0 &&
 		!qstate->env->cfg->serve_expired)
 		return 0;
+
+	/* The EDE is added to the out-list so it is encoded in the cached message */
+	if (qstate->env->cfg->ede && qstate->return_msg->rep->reason_bogus != LDNS_EDE_NONE) {
+		edns_opt_list_append_ede(&edns.opt_list_out, qstate->env->scratch,
+					qstate->return_msg->rep->reason_bogus,
+					qstate->return_msg->rep->reason_bogus_str);
+	}
+
 	if(verbosity >= VERB_ALGO)
 		log_dns_msg("cachedb encoding", &qstate->return_msg->qinfo,
 	                qstate->return_msg->rep);
@@ -508,6 +515,7 @@ parse_data(struct module_qstate* qstate, struct sldns_buffer* buf)
 {
 	struct msg_parse* prs;
 	struct edns_data edns;
+	struct edns_option* ede;
 	uint64_t timestamp, expiry;
 	time_t adjust;
 	size_t lim = sldns_buffer_limit(buf);
@@ -545,6 +553,24 @@ parse_data(struct module_qstate* qstate, struct sldns_buffer* buf)
 	if(!qstate->return_msg)
 		return 0;
 	
+	/* We find the EDE in the in-list after parsing */
+	if(qstate->env->cfg->ede &&
+		(ede = edns_opt_list_find(edns.opt_list_in, LDNS_EDNS_EDE))) {
+		if(ede->opt_len >= 2) {
+			qstate->return_msg->rep->reason_bogus =
+				sldns_read_uint16(ede->opt_data);
+		}
+		/* allocate space and store the error string and it's size */
+		if(ede->opt_len > 2) {
+			size_t ede_len = ede->opt_len - 2;
+			qstate->return_msg->rep->reason_bogus_str = regional_alloc(
+				qstate->region, sizeof(char) * (ede_len+1));
+			memcpy(qstate->return_msg->rep->reason_bogus_str,
+				ede->opt_data+2, ede_len);
+			qstate->return_msg->rep->reason_bogus_str[ede_len] = 0;
+		}
+	}
+
 	qstate->return_rcode = LDNS_RCODE_NOERROR;
 
 	/* see how much of the TTL expired, and remove it */
