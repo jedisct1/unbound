@@ -1,3 +1,56 @@
+31 August 2023: Wouter
+	- Fix autoconf 2.69 warnings in configure.
+	- Fix #927: unbound 1.18.0 make test error. Fix make test without SHA1.
+
+30 August 2023: Wouter
+	- Fix for WKS call to getservbyname that creates allocation on exit
+	  in unit test by testing numbers first and testing from the services
+	  list later.
+
+28 August 2023: Wouter
+	- Fix for version generation race condition that ignored changes.
+
+25 August 2023: Wouter
+	- Fix compile error on NetBSD in util/netevent.h.
+
+23 August 2023: Wouter
+	- Tag for 1.18.0rc1 release. This became the 1.18.0 release on
+	  30 aug 2023, with the fix from 25 aug, fix compile on NetBSD
+	  included. The repository continues with version 1.18.1.
+
+22 August 2023: Wouter
+	- Set version number to 1.18.0.
+
+21 August 2023: Wouter
+	- Debug Windows ci workflow.
+	- Fix windows ci workflow to install bison and flex.
+	- Fix for #925: unbound.service: Main process exited, code=killed,
+	  status=11/SEGV. Fixes cachedb configuration handling.
+	- Fix #923: processQueryResponse() THROWAWAY should be mindful of
+	  fail_reply.
+	- Fix unit test for unbound-control to work when threads are disabled,
+	  and fix cache dump check.
+
+18 August 2023: Wouter
+	- Fix for iter_dec_attempts that could cause a hang, part of
+	  capsforid and qname minimisation, depending on the settings.
+	- Fix uninitialized memory passed in padding bytes of cmsg to sendmsg.
+	- Fix stat_values test to work with dig that enables DNS cookies.
+
+17 August 2023: Wouter
+	- Merge PR #762: Downstream DNS Server Cookies a la RFC7873 and
+	  RFC9018. Create server cookies for clients that send client cookies.
+	  This needs to be explicitly turned on in the config file with:
+	  `answer-cookie: yes`. A `cookie-secret:` can be configured for
+	  anycast setups. Without one, a random cookie secret is generated.
+	  The acl option `allow_cookie` allows queries with either a valid
+	  cookie or over a stateful transport. The statistics output has
+	  `queries_cookie_valid` and `queries_cookie_client` and
+	  `queries_cookie_invalid` information. The `ip\-ratelimit\-cookie:`
+	  value determines a rate limit for queries with cookies, if desired.
+	- Fix regional_alloc_init for potential unaligned source of the copy.
+	- Fix ip_ratelimit test to work with dig that enables DNS cookies.
+
 2 August 2023: George
 	- Move a cache reply callback in worker.c closer to the cache reply
 	  generation.
