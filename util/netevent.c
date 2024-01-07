@@ -1070,7 +1070,13 @@ comm_point_udp_ancil_callback(int fd, short event, void* arg)
 		fptr_ok(fptr_whitelist_comm_point(rep.c->callback));
 		if((*rep.c->callback)(rep.c, rep.c->cb_arg, NETEVENT_NOERROR, &rep)) {
 			/* send back immediate reply */
-			(void)comm_point_send_udp_msg_if(rep.c, rep.c->buffer,
+			struct sldns_buffer *buffer;
+#ifdef USE_DNSCRYPT
+			buffer = rep.c->dnscrypt_buffer;
+#else
+			buffer = rep.c->buffer;
+#endif
+			(void)comm_point_send_udp_msg_if(rep.c, buffer,
 				(struct sockaddr*)&rep.remote_addr,
 				rep.remote_addrlen, &rep);
 		}
@@ -1742,6 +1748,9 @@ ssl_handshake(struct comm_point* c)
 			/* connection upgraded to HTTP2 */
 			c->tcp_do_toggle_rw = 0;
 			c->use_h2 = 1;
+		} else {
+			verbose(VERB_ALGO, "client doesn't support HTTP/2");
+			return 0;
 		}
 	}
 #endif
@@ -4760,7 +4769,7 @@ comm_point_send_reply(struct comm_reply *repinfo)
 		if(repinfo->c->dtenv != NULL && repinfo->c->dtenv->log_client_response_messages) {
 			log_addr(VERB_ALGO, "from local addr", (void*)repinfo->c->socket->addr->ai_addr, repinfo->c->socket->addr->ai_addrlen);
 			log_addr(VERB_ALGO, "response to client", &repinfo->client_addr, repinfo->client_addrlen);
-			dt_msg_send_client_response(repinfo->c->dtenv, &repinfo->client_addr, (void*)repinfo->c->socket->addr->ai_addr, repinfo->c->type, repinfo->c->buffer);
+			dt_msg_send_client_response(repinfo->c->dtenv, &repinfo->client_addr, (void*)repinfo->c->socket->addr->ai_addr, repinfo->c->type, repinfo->c->ssl, repinfo->c->buffer);
 		}
 #endif
 	} else {
@@ -4771,7 +4780,7 @@ comm_point_send_reply(struct comm_reply *repinfo)
 		if(repinfo->c->tcp_parent->dtenv != NULL && repinfo->c->tcp_parent->dtenv->log_client_response_messages) {
 			log_addr(VERB_ALGO, "from local addr", (void*)repinfo->c->socket->addr->ai_addr, repinfo->c->socket->addr->ai_addrlen);
 			log_addr(VERB_ALGO, "response to client", &repinfo->client_addr, repinfo->client_addrlen);
-			dt_msg_send_client_response(repinfo->c->tcp_parent->dtenv, &repinfo->client_addr, (void*)repinfo->c->socket->addr->ai_addr, repinfo->c->type,
+			dt_msg_send_client_response(repinfo->c->tcp_parent->dtenv, &repinfo->client_addr, (void*)repinfo->c->socket->addr->ai_addr, repinfo->c->type, repinfo->c->ssl,
 				( repinfo->c->tcp_req_info? repinfo->c->tcp_req_info->spool_buffer: repinfo->c->buffer ));
 		}
 #endif

@@ -952,11 +952,11 @@ void log_crypto_err_code(const char* str, unsigned long err)
 #endif /* HAVE_SSL */
 }
 
+#ifdef HAVE_SSL
 /** Print crypt erro with SSL_get_error want code and err_get_error code */
 static void log_crypto_err_io_code_arg(const char* str, int r,
 	unsigned long err, int err_present)
 {
-#ifdef HAVE_SSL
 	int print_errno = 0, print_crypto_err = 0;
 	const char* inf = NULL;
 
@@ -982,15 +982,21 @@ static void log_crypto_err_io_code_arg(const char* str, int r,
 	case SSL_ERROR_WANT_X509_LOOKUP:
 		inf = "want X509 lookup";
 		break;
+#ifdef SSL_ERROR_WANT_ASYNC
 	case SSL_ERROR_WANT_ASYNC:
 		inf = "want async";
 		break;
+#endif
+#ifdef SSL_ERROR_WANT_ASYNC_JOB
 	case SSL_ERROR_WANT_ASYNC_JOB:
 		inf = "want async job";
 		break;
+#endif
+#ifdef SSL_ERROR_WANT_CLIENT_HELLO_CB
 	case SSL_ERROR_WANT_CLIENT_HELLO_CB:
 		inf = "want client hello cb";
 		break;
+#endif
 	case SSL_ERROR_SYSCALL:
 		print_errno = 1;
 		inf = "syscall";
@@ -1027,13 +1033,8 @@ static void log_crypto_err_io_code_arg(const char* str, int r,
 			log_err("str: %s", inf);
 		}
 	}
-#else
-	(void)str;
-	(void)r;
-	(void)err;
-	(void)err_present;
-#endif /* HAVE_SSL */
 }
+#endif /* HAVE_SSL */
 
 void log_crypto_err_io(const char* str, int r)
 {

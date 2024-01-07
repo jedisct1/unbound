@@ -1,3 +1,89 @@
+5 January 2024: Wouter
+	- Merge #987: skip edns frag retry if advertised udp payload size is
+	  not smaller.
+	- Fix unit test for #987 change in udp1xxx retry packet send.
+
+4 January 2024: Wouter
+	- Remove unneeded newlines and improve indentation in remote control
+	  code.
+
+3 January 2024: Wouter
+	- Merge #980: DoH: reject non-h2 early. To fix #979: Improve errors
+	  for non-HTTP/2 DoH clients.
+	- Merge #985: Add DoH and DoT to dnstap message.
+	- Fix #983: Sha1 runtime insecure change was incomplete.
+
+22 December 2023: Yorgos
+	- Update example.conf with cookie options.
+
+8 December 2023: Yorgos
+	- Merge PR #973: Use the origin (DNAME) TTL for synthesized CNAMEs as
+	  per RFC 6672.
+
+8 December 2023: Wouter
+	- Fix root_zonemd unit test, it checks that the root ZONEMD verifies,
+	  now that the root has a valid ZONEMD.
+
+7 December 2023: Wouter
+	- Fix #974: doc: default number of outgoing ports without libevent.
+	- Merge #975: Fixed some syntax errors in rpl files.
+
+6 December 2023: Wouter
+	- Fix to sync the tests script file common.sh.
+	- iana portlist update.
+	- Updated IPv4 and IPv6 address for b.root-servers.net in root hints.
+	- Update test script file common.sh.
+	- Fix tests to use new common.sh functions, wait_logfile and
+	  kill_from_pidfile.
+
+5 December 2023: Wouter
+	- Merge #971: fix 'WARNING: Message has 41 extra bytes at end'.
+	- Fix #969: [FR] distinguish Do53, DoT and DoH in the logs.
+	- Fix dnstap that assertion failed on logging other than UDP and TCP
+	  traffic. It lists it as TCP traffic.
+
+27 November 2023: Yorgos
+	- Merge #968: Replace the obsolescent fgrep with grep -F in tests.
+
+27 November 2023: Wouter
+	- Fix #964: config.h.in~ backup file in release tar balls.
+
+24 November 2023: Yorgos
+	- Use 127.0.0.1 explicitly in tests to avoid delays and errors on
+	  newer systems.
+
+9 November 2023: Wouter
+	- Fix unit test parse of origin syntax.
+
+2 November 2023: Wouter
+	- Set version number to 1.19.0.
+	- Tag for 1.19.0rc1 release. It became 1.19.0 release on 8 nov 2023.
+	  The repository continues with 1.19.1.
+
+1 November 2023: George
+	- Mention flex and bison in README.md when building from repository
+	  source.
+
+1 November 2023: Wouter
+	- Fix SSL compile failure for definition in log_crypto_err_io_code_arg.
+	- Fix SSL compile failure for other missing definitions in
+	  log_crypto_err_io_code_arg.
+	- Fix compilation without openssl, remove unused function warning.
+
+31 October 2023: George
+	- Fix #941: dnscrypt doesn't work after upgrade to 1.18 with
+	  suggestion by dukeartem to also fix the udp_ancil with dnscrypt.
+
+30 October 2023: George
+	- Merge #930 from Stuart Henderson: add void to
+	  log_ident_revert_to_default declaration.
+
+30 October 2023: Wouter
+	- autoconf.
+
+24 October 2023: George
+	- Clearer configure text for missing protobuf-c development libraries.
+
 20 October 2023: Wouter
 	- Merge #951: Cachedb no store. The cachedb-no-store: yes option is
 	  used to stop cachedb from writing messages to the backend storage.
@@ -4866,7 +4952,7 @@
 	- Fix that with openssl 1.1 control-use-cert: no uses less cpu, by
 	  using no encryption over the unix socket.
 
-22 Novenber 2016: Ralph
+22 November 2016: Ralph
 	- Make access-control-tag-data RDATA absolute. This makes the RDATA
 	  origin consistent between local-data and access-control-tag-data.
 	- Fix NSEC ENT wildcard check. Matching wildcard does not have to be a
