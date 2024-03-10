@@ -3082,7 +3082,8 @@ processQueryResponse(struct module_qstate* qstate, struct iter_qstate* iq,
 			/* DNAME to a subdomain loop; do not recurse */
 			type = RESPONSE_TYPE_ANSWER;
 		}
-	} else if(type == RESPONSE_TYPE_CNAME &&
+	}
+	if(type == RESPONSE_TYPE_CNAME &&
 		iq->qchase.qtype == LDNS_RR_TYPE_CNAME &&
 		iq->minimisation_state == MINIMISE_STATE &&
 		query_dname_compare(iq->qchase.qname, iq->qinfo_out.qname) == 0) {
@@ -4151,10 +4152,10 @@ process_response(struct module_qstate* qstate, struct iter_qstate* iq,
 			/* like packet got dropped */
 			goto handle_it;
 		}
-		if(!inplace_cb_edns_back_parsed_call(qstate->env, qstate)) {
-			log_err("unable to call edns_back_parsed callback");
-			goto handle_it;
-		}
+	}
+	if(!inplace_cb_edns_back_parsed_call(qstate->env, qstate)) {
+		log_err("unable to call edns_back_parsed callback");
+		goto handle_it;
 	}
 
 	/* remove CD-bit, we asked for in case we handle validation ourself */

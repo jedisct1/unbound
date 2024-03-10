@@ -1,3 +1,45 @@
+8 March 2024: Wouter
+	- Fix unbound-control-setup.cmd to use 3072 bits so that certificates
+	  are long enough for newer OpenSSL versions.
+	- Fix TTL of synthesized CNAME when a DNAME is used from cache.
+	- Remove unused portion from iter_dname_ttl unit test.
+	- Fix validator classification of qtype DNAME for positive and
+	  redirection answers, and fix validator signature routine for dealing
+	  with the synthesized CNAME for a DNAME without previously
+	  encountering it and also for when the qtype is DNAME.
+	- Fix qname minimisation for reply with a DNAME for qtype CNAME that
+	  answers it.
+	- Fix doc test so it ignores but outputs unsupported doxygen options.
+	- Fix unbound-control-setup.cmd to have CA v3 basicConstraints,
+	  like unbound-control-setup.sh has.
+
+8 March 2024: Yorgos
+	- Update doc/unbound.doxygen with 'doxygen -u'. Fixes option
+	  deprecation warnings and updates with newer defaults.
+
+7 March 2024: Wouter
+	- Version set to 1.19.3 for release. After 1.19.2 point release with
+	  security fix for CVE-2024-1931, Denial of service when trimming
+	  EDE text on positive replies. The code repo includes the fix and
+	  is for version 1.19.3.
+
+5 March 2024: Wouter
+	- Fix for #1022: Fix ede prohibited in access control refused answers.
+
+4 March 2024: Wouter
+	- Fix edns subnet replies for scope zero answers to not get stored
+	  in the global cache, and in cachedb, when the upstream replies
+	  without an EDNS record.
+
+28 February 2024: Wouter
+	- Move github workflows to use checkoutv4.
+
+23 February 2024: Yorgos
+	- Document the suspend argument for process_ds_response().
+
+22 February 2024: Wouter
+	- Fix trim of EDE text from large udp responses from spinning cpu.
+
 20 February 2024: Yorgos
 	- Merge #1010: Mention REFUSED has the TC bit set with unmatched
 	  allow_cookie acl in the manpage. It also fixes the code to match the
