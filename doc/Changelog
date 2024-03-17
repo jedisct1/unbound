@@ -1,7 +1,35 @@
+15 March 2024: Yorgos
+	- Merge #1030: Persist the openssl and expat directories for repeated
+	  Windows builds.
+
+15 March 2024: Wouter
+	- Fix that addrinfo is not kept around but copied and freed, so that
+	  log-destaddr uses a copy of the information, much like NSD does.
+
+13 March 2024: Wouter
+	- Fix #1029: rpz trigger clientip and action rpz-passthru not working
+	  as expected.
+	- Fix rpz that the rpz override is taken in case of clientip triggers.
+	  Fix that the clientip passthru action is logged. Fix that the
+	  clientip localdata action is logged. Fix rpz override action cname
+	  for the clientip trigger.
+	- Fix to unify codepath for local alias for rpz cname action override.
+	- Fix rpz for cname override action after nsdname and nsip triggers.
+
+12 March 2024: Yorgos
+	- Merge #1028: Clearer documentation for tcp-idle-timeout and
+	  edns-tcp-keepalive-timeout.
+
+11 March 2024: Wouter
+	- Fix #1021 Inconsistent Behavior with Changing rpz-cname-override
+	  and doing a unbound-control reload.
+
 8 March 2024: Wouter
 	- Fix unbound-control-setup.cmd to use 3072 bits so that certificates
-	  are long enough for newer OpenSSL versions.
-	- Fix TTL of synthesized CNAME when a DNAME is used from cache.
+	  are long enough for newer OpenSSL versions. This fix is included
+	  in 1.19.3rc2.
+	- Fix TTL of synthesized CNAME when a DNAME is used from cache. This
+	  fix is included in 1.19.3rc2.
 	- Remove unused portion from iter_dname_ttl unit test.
 	- Fix validator classification of qtype DNAME for positive and
 	  redirection answers, and fix validator signature routine for dealing
@@ -11,7 +39,7 @@
 	  answers it.
 	- Fix doc test so it ignores but outputs unsupported doxygen options.
 	- Fix unbound-control-setup.cmd to have CA v3 basicConstraints,
-	  like unbound-control-setup.sh has.
+	  like unbound-control-setup.sh has. This fix is included in 1.19.3rc2.
 
 8 March 2024: Yorgos
 	- Update doc/unbound.doxygen with 'doxygen -u'. Fixes option
@@ -21,7 +49,8 @@
 	- Version set to 1.19.3 for release. After 1.19.2 point release with
 	  security fix for CVE-2024-1931, Denial of service when trimming
 	  EDE text on positive replies. The code repo includes the fix and
-	  is for version 1.19.3.
+	  is for version 1.19.3. The code repo continues for version 1.19.4,
+	  but 1.19.3 includes the fixes in 1.19.3rc2 as well.
 
 5 March 2024: Wouter
 	- Fix for #1022: Fix ede prohibited in access control refused answers.
