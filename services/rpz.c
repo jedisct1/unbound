@@ -1244,16 +1244,20 @@ rpz_find_zone(struct local_zones* zones, uint8_t* qname, size_t qname_len, uint1
 /** Find entry for RR type in the list of rrsets for the clientip. */
 static struct local_rrset*
 rpz_find_synthesized_rrset(uint16_t qtype,
-	struct clientip_synthesized_rr* data)
+	struct clientip_synthesized_rr* data, int alias_ok)
 {
-	struct local_rrset* cursor = data->data;
+	struct local_rrset* cursor = data->data, *cname = NULL;
 	while( cursor != NULL) {
 		struct packed_rrset_key* packed_rrset = &cursor->rrset->rk;
 		if(htons(qtype) == packed_rrset->type) {
 			return cursor;
 		}
+		if(ntohs(packed_rrset->type) == LDNS_RR_TYPE_CNAME && alias_ok)
+			cname = cursor;
 		cursor = cursor->next;
 	}
+	if(alias_ok)
+		return cname;
 	return NULL;
 }
 
@@ -1439,7 +1443,7 @@ static int rpz_remove_clientip_rr(struct clientip_synthesized_rr* node,
 	struct local_rrset* rrset;
 	struct packed_rrset_data* d;
 	size_t index;
-	rrset = rpz_find_synthesized_rrset(rr_type, node);
+	rrset = rpz_find_synthesized_rrset(rr_type, node, 0);
 	if(rrset == NULL)
 		return 0; /* type not found, ignore */
 	d = (struct packed_rrset_data*)rrset->rrset->entry.data;
@@ -1842,7 +1846,7 @@ rpz_apply_clientip_localdata_action(struct clientip_synthesized_rr* raddr,
 	}
 
 	/* check query type / rr type */
-	rrset = rpz_find_synthesized_rrset(qinfo->qtype, raddr);
+	rrset = rpz_find_synthesized_rrset(qinfo->qtype, raddr, 1);
 	if(rrset == NULL) {
 		verbose(VERB_ALGO, "rpz: unable to find local-data for query");
 		rrset_count = 0;
@@ -1888,8 +1892,7 @@ rpz_apply_cname_override_action(struct rpz* r,
 		sizeof(struct local_rrset));
 	if(qinfo->local_alias == NULL)
 		return 0; /* out of memory */
-	qinfo->local_alias->rrset = regional_alloc_init(temp,
-		r->cname_override, sizeof(*r->cname_override));
+	qinfo->local_alias->rrset = respip_copy_rrset(r->cname_override, temp);
 	if(qinfo->local_alias->rrset == NULL) {
 		qinfo->local_alias = NULL;
 		return 0; /* out of memory */
@@ -2009,6 +2012,7 @@ rpz_synthesize_localdata_from_rrset(struct rpz* ATTR_UNUSED(r), struct module_qs
 	msg = rpz_dns_msg_new(ms->region);
 	if(msg == NULL) { return NULL; }
 
+	msg->qinfo = *qi;
         new_reply_info = construct_reply_info_base(ms->region,
                                                    LDNS_RCODE_NOERROR | BIT_QR | BIT_AA | BIT_RA,
                                                    1, /* qd */
@@ -2051,40 +2055,42 @@ rpz_synthesize_localdata_from_rrset(struct rpz* ATTR_UNUSED(r), struct module_qs
 
 static inline struct dns_msg*
 rpz_synthesize_nsip_localdata(struct rpz* r, struct module_qstate* ms,
-	struct clientip_synthesized_rr* data, struct auth_zone* az)
+	struct query_info* qi, struct clientip_synthesized_rr* data,
+	struct auth_zone* az)
 {
-	struct query_info* qi = &ms->qinfo;
 	struct local_rrset* rrset;
 
-	rrset = rpz_find_synthesized_rrset(qi->qtype, data);
+	rrset = rpz_find_synthesized_rrset(qi->qtype, data, 1);
 	if(rrset == NULL) {
 		verbose(VERB_ALGO, "rpz: nsip: no matching local data found");
 		return NULL;
 	}
 
-	return rpz_synthesize_localdata_from_rrset(r, ms, &ms->qinfo, rrset, az);
+	return rpz_synthesize_localdata_from_rrset(r, ms, qi, rrset, az);
 }
 
 /* copy'n'paste from localzone.c */
 static struct local_rrset*
 local_data_find_type(struct local_data* data, uint16_t type, int alias_ok)
 {
-	struct local_rrset* p;
+	struct local_rrset* p, *cname = NULL;
 	type = htons(type);
 	for(p = data->rrsets; p; p = p->next) {
 		if(p->rrset->rk.type == type)
 			return p;
 		if(alias_ok && p->rrset->rk.type == htons(LDNS_RR_TYPE_CNAME))
-			return p;
+			cname = p;
 	}
+	if(alias_ok)
+		return cname;
 	return NULL;
 }
 
 /* based on localzone.c:local_data_answer() */
 static inline struct dns_msg*
 rpz_synthesize_nsdname_localdata(struct rpz* r, struct module_qstate* ms,
-	struct local_zone* z, struct matched_delegation_point const* match,
-	struct auth_zone* az)
+	struct query_info* qi, struct local_zone* z,
+	struct matched_delegation_point const* match, struct auth_zone* az)
 {
 	struct local_data key;
 	struct local_data* ld;
@@ -2105,13 +2111,13 @@ rpz_synthesize_nsdname_localdata(struct rpz* r, struct module_qstate* ms,
 		return NULL;
 	}
 
-	rrset = local_data_find_type(ld, ms->qinfo.qtype, 1);
+	rrset = local_data_find_type(ld, qi->qtype, 1);
 	if(rrset == NULL) {
 		verbose(VERB_ALGO, "rpz: nsdname: no matching local data found");
 		return NULL;
 	}
 
-	return rpz_synthesize_localdata_from_rrset(r, ms, &ms->qinfo, rrset, az);
+	return rpz_synthesize_localdata_from_rrset(r, ms, qi, rrset, az);
 }
 
 /* like local_data_answer for qname triggers after a cname */
@@ -2128,12 +2134,12 @@ rpz_synthesize_qname_localdata_msg(struct rpz* r, struct module_qstate* ms,
 	key.namelabs = dname_count_labels(qinfo->qname);
 	ld = (struct local_data*)rbtree_search(&z->data, &key.node);
 	if(ld == NULL) {
-		verbose(VERB_ALGO, "rpz: qname after cname: name not found");
+		verbose(VERB_ALGO, "rpz: qname: name not found");
 		return NULL;
 	}
 	rrset = local_data_find_type(ld, qinfo->qtype, 1);
 	if(rrset == NULL) {
-		verbose(VERB_ALGO, "rpz: qname after cname: type not found");
+		verbose(VERB_ALGO, "rpz: qname: type not found");
 		return NULL;
 	}
 	return rpz_synthesize_localdata_from_rrset(r, ms, qinfo, rrset, az);
@@ -2151,6 +2157,7 @@ rpz_synthesize_cname_override_msg(struct rpz* r, struct module_qstate* ms,
 	msg = rpz_dns_msg_new(ms->region);
 	if(msg == NULL) { return NULL; }
 
+	msg->qinfo = *qinfo;
         new_reply_info = construct_reply_info_base(ms->region,
                                                    LDNS_RCODE_NOERROR | BIT_QR | BIT_AA | BIT_RA,
                                                    1, /* qd */
@@ -2253,8 +2260,9 @@ rpz_delegation_point_ipbased_trigger_lookup(struct rpz* rpz, struct iter_qstate*
 }
 
 static struct dns_msg*
-rpz_apply_nsip_trigger(struct module_qstate* ms, struct rpz* r,
-	struct clientip_synthesized_rr* raddr, struct auth_zone* az)
+rpz_apply_nsip_trigger(struct module_qstate* ms, struct query_info* qchase,
+	struct rpz* r, struct clientip_synthesized_rr* raddr,
+	struct auth_zone* az)
 {
 	enum rpz_action action = raddr->action;
 	struct dns_msg* ret = NULL;
@@ -2267,16 +2275,16 @@ rpz_apply_nsip_trigger(struct module_qstate* ms, struct rpz* r,
 
 	if(action == RPZ_LOCAL_DATA_ACTION && raddr->data == NULL) {
 		verbose(VERB_ALGO, "rpz: bug: nsip local data action but no local data");
-		ret = rpz_synthesize_nodata(r, ms, &ms->qinfo, az);
+		ret = rpz_synthesize_nodata(r, ms, qchase, az);
 		goto done;
 	}
 
 	switch(action) {
 	case RPZ_NXDOMAIN_ACTION:
-		ret = rpz_synthesize_nxdomain(r, ms, &ms->qinfo, az);
+		ret = rpz_synthesize_nxdomain(r, ms, qchase, az);
 		break;
 	case RPZ_NODATA_ACTION:
-		ret = rpz_synthesize_nodata(r, ms, &ms->qinfo, az);
+		ret = rpz_synthesize_nodata(r, ms, qchase, az);
 		break;
 	case RPZ_TCP_ONLY_ACTION:
 		/* basically a passthru here but the tcp-only will be
@@ -2285,19 +2293,19 @@ rpz_apply_nsip_trigger(struct module_qstate* ms, struct rpz* r,
 		ret = NULL;
 		break;
 	case RPZ_DROP_ACTION:
-		ret = rpz_synthesize_nodata(r, ms, &ms->qinfo, az);
+		ret = rpz_synthesize_nodata(r, ms, qchase, az);
 		ms->is_drop = 1;
 		break;
 	case RPZ_LOCAL_DATA_ACTION:
-		ret = rpz_synthesize_nsip_localdata(r, ms, raddr, az);
-		if(ret == NULL) { ret = rpz_synthesize_nodata(r, ms, &ms->qinfo, az); }
+		ret = rpz_synthesize_nsip_localdata(r, ms, qchase, raddr, az);
+		if(ret == NULL) { ret = rpz_synthesize_nodata(r, ms, qchase, az); }
 		break;
 	case RPZ_PASSTHRU_ACTION:
 		ret = NULL;
 		ms->rpz_passthru = 1;
 		break;
 	case RPZ_CNAME_OVERRIDE_ACTION:
-		ret = rpz_synthesize_cname_override_msg(r, ms, &ms->qinfo);
+		ret = rpz_synthesize_cname_override_msg(r, ms, qchase);
 		break;
 	default:
 		verbose(VERB_ALGO, "rpz: nsip: bug: unhandled or invalid action: '%s'",
@@ -2316,9 +2324,9 @@ done:
 }
 
 static struct dns_msg*
-rpz_apply_nsdname_trigger(struct module_qstate* ms, struct rpz* r,
-	struct local_zone* z, struct matched_delegation_point const* match,
-	struct auth_zone* az)
+rpz_apply_nsdname_trigger(struct module_qstate* ms, struct query_info* qchase,
+	struct rpz* r, struct local_zone* z,
+	struct matched_delegation_point const* match, struct auth_zone* az)
 {
 	struct dns_msg* ret = NULL;
 	enum rpz_action action = localzone_type_to_rpz_action(z->type);
@@ -2331,10 +2339,10 @@ rpz_apply_nsdname_trigger(struct module_qstate* ms, struct rpz* r,
 
 	switch(action) {
 	case RPZ_NXDOMAIN_ACTION:
-		ret = rpz_synthesize_nxdomain(r, ms, &ms->qinfo, az);
+		ret = rpz_synthesize_nxdomain(r, ms, qchase, az);
 		break;
 	case RPZ_NODATA_ACTION:
-		ret = rpz_synthesize_nodata(r, ms, &ms->qinfo, az);
+		ret = rpz_synthesize_nodata(r, ms, qchase, az);
 		break;
 	case RPZ_TCP_ONLY_ACTION:
 		/* basically a passthru here but the tcp-only will be
@@ -2343,19 +2351,19 @@ rpz_apply_nsdname_trigger(struct module_qstate* ms, struct rpz* r,
 		ret = NULL;
 		break;
 	case RPZ_DROP_ACTION:
-		ret = rpz_synthesize_nodata(r, ms, &ms->qinfo, az);
+		ret = rpz_synthesize_nodata(r, ms, qchase, az);
 		ms->is_drop = 1;
 		break;
 	case RPZ_LOCAL_DATA_ACTION:
-		ret = rpz_synthesize_nsdname_localdata(r, ms, z, match, az);
-		if(ret == NULL) { ret = rpz_synthesize_nodata(r, ms, &ms->qinfo, az); }
+		ret = rpz_synthesize_nsdname_localdata(r, ms, qchase, z, match, az);
+		if(ret == NULL) { ret = rpz_synthesize_nodata(r, ms, qchase, az); }
 		break;
 	case RPZ_PASSTHRU_ACTION:
 		ret = NULL;
 		ms->rpz_passthru = 1;
 		break;
 	case RPZ_CNAME_OVERRIDE_ACTION:
-		ret = rpz_synthesize_cname_override_msg(r, ms, &ms->qinfo);
+		ret = rpz_synthesize_cname_override_msg(r, ms, qchase);
 		break;
 	default:
 		verbose(VERB_ALGO, "rpz: nsdname: bug: unhandled or invalid action: '%s'",
@@ -2449,7 +2457,7 @@ rpz_callback_from_iterator_module(struct module_qstate* ms, struct iter_qstate* 
 
 		/* the nsdname has precedence over the nsip triggers */
 		z = rpz_delegation_point_zone_lookup(is->dp, r->nsdname_zones,
-						     ms->qinfo.qclass, &match);
+						     is->qchase.qclass, &match);
 		if(z != NULL) {
 			lock_rw_unlock(&a->lock);
 			break;
@@ -2472,9 +2480,9 @@ rpz_callback_from_iterator_module(struct module_qstate* ms, struct iter_qstate* 
 		if(z) {
 			lock_rw_unlock(&z->lock);
 		}
-		return rpz_apply_nsip_trigger(ms, r, raddr, a);
+		return rpz_apply_nsip_trigger(ms, &is->qchase, r, raddr, a);
 	}
-	return rpz_apply_nsdname_trigger(ms, r, z, &match, a);
+	return rpz_apply_nsdname_trigger(ms, &is->qchase, r, z, &match, a);
 }
 
 struct dns_msg* rpz_callback_from_iterator_cname(struct module_qstate* ms,
@@ -2537,10 +2545,10 @@ struct dns_msg* rpz_callback_from_iterator_cname(struct module_qstate* ms,
 		dname_str(is->qchase.qname, nm);
 		dname_str(z->name, zn);
 		if(strcmp(zn, nm) != 0)
-			verbose(VERB_ALGO, "rpz: qname trigger after cname %s on %s, with action=%s",
+			verbose(VERB_ALGO, "rpz: qname trigger %s on %s, with action=%s",
 				zn, nm, rpz_action_to_string(localzone_type_to_rpz_action(lzt)));
 		else
-			verbose(VERB_ALGO, "rpz: qname trigger after cname %s, with action=%s",
+			verbose(VERB_ALGO, "rpz: qname trigger %s, with action=%s",
 				nm, rpz_action_to_string(localzone_type_to_rpz_action(lzt)));
 	}
 	switch(localzone_type_to_rpz_action(lzt)) {
@@ -2569,7 +2577,7 @@ struct dns_msg* rpz_callback_from_iterator_cname(struct module_qstate* ms,
 		ms->rpz_passthru = 1;
 		break;
 	default:
-		verbose(VERB_ALGO, "rpz: qname trigger after cname: bug: unhandled or invalid action: '%s'",
+		verbose(VERB_ALGO, "rpz: qname trigger: bug: unhandled or invalid action: '%s'",
 			rpz_action_to_string(localzone_type_to_rpz_action(lzt)));
 		ret = NULL;
 	}
