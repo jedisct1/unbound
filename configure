@@ -1596,7 +1596,8 @@ Optional Features:
   --disable-libtool-lock  avoid locking (might break parallel builds)
   --disable-rpath         disable hardcoded rpath (default=enabled)
   --disable-largefile     omit support for large files
-  --enable-systemd        compile with systemd support
+  --enable-systemd        compile with systemd support (requires libsystemd,
+                          pkg-config)
   --enable-alloc-checks   enable to memory allocation statistics, for debug
                           purposes
   --enable-alloc-lite     enable for lightweight alloc assertions, for debug
@@ -17624,7 +17625,8 @@ have_systemd=no
 if test "x$enable_systemd" != xno
 then :
 
-
+    if test -n "$PKG_CONFIG"; then
+		have_systemd=no
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for SYSTEMD" >&5
@@ -17684,11 +17686,31 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$SYSTEMD_PKG_ERRORS" >&5
 
-	have_systemd=no
+	as_fn_error $? "Package requirements (libsystemd) were not met:
+
+$SYSTEMD_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables SYSTEMD_CFLAGS
+and SYSTEMD_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details." "$LINENO" 5
 elif test $pkg_failed = untried; then
      	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	have_systemd=no
+	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables SYSTEMD_CFLAGS
+and SYSTEMD_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See \`config.log' for more details" "$LINENO" 5; }
 else
 	SYSTEMD_CFLAGS=$pkg_cv_SYSTEMD_CFLAGS
 	SYSTEMD_LIBS=$pkg_cv_SYSTEMD_LIBS
@@ -17699,6 +17721,7 @@ fi
 		if test "x$have_systemd" != "xyes"
 then :
 
+		have_systemd_daemon=no
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for SYSTEMD_DAEMON" >&5
@@ -17758,11 +17781,31 @@ fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$SYSTEMD_DAEMON_PKG_ERRORS" >&5
 
-	have_systemd_daemon=no
+	as_fn_error $? "Package requirements (libsystemd-daemon) were not met:
+
+$SYSTEMD_DAEMON_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables SYSTEMD_DAEMON_CFLAGS
+and SYSTEMD_DAEMON_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details." "$LINENO" 5
 elif test $pkg_failed = untried; then
      	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-	have_systemd_daemon=no
+	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables SYSTEMD_DAEMON_CFLAGS
+and SYSTEMD_DAEMON_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See \`config.log' for more details" "$LINENO" 5; }
 else
 	SYSTEMD_DAEMON_CFLAGS=$pkg_cv_SYSTEMD_DAEMON_CFLAGS
 	SYSTEMD_DAEMON_LIBS=$pkg_cv_SYSTEMD_DAEMON_LIBS
@@ -17789,7 +17832,9 @@ printf "%s\n" "#define HAVE_SYSTEMD 1" >>confdefs.h
   *) :
      ;;
 esac
-
+    else
+    	as_fn_error $? "systemd enabled but need pkg-config to configure for it" "$LINENO" 5
+    fi
 
 fi
  if test "x$have_systemd" = xyes; then
@@ -19185,7 +19230,7 @@ fi
 
 
         if test -z "$PYTHON"; then
-           as_fn_error $? "Cannot find python$PYTHON_VERSION in your system path" "$LINENO" 5
+           as_fn_error $? "Cannot find 'python$PYTHON_VERSION' in your system path. You can use the environment variable 'PYTHON_VERSION=version_number' for an explicit version." "$LINENO" 5
            PYTHON_VERSION=""
         fi
 
@@ -20656,6 +20701,12 @@ then :
   printf "%s\n" "#define HAVE_BIO_SET_CALLBACK_EX 1" >>confdefs.h
 
 fi
+ac_fn_c_check_func "$LINENO" "SSL_CTX_set_tmp_ecdh" "ac_cv_func_SSL_CTX_set_tmp_ecdh"
+if test "x$ac_cv_func_SSL_CTX_set_tmp_ecdh" = xyes
+then :
+  printf "%s\n" "#define HAVE_SSL_CTX_SET_TMP_ECDH 1" >>confdefs.h
+
+fi
 
 
 # these check_funcs need -lssl
@@ -21190,7 +21241,25 @@ case "$enable_ecdsa" in
       ;;
     *)
       if test $USE_NSS = "no" -a $USE_NETTLE = "no"; then
-	      ac_fn_c_check_func "$LINENO" "ECDSA_sign" "ac_cv_func_ECDSA_sign"
+	      ac_fn_c_check_func "$LINENO" "EVP_PKEY_fromdata" "ac_cv_func_EVP_PKEY_fromdata"
+if test "x$ac_cv_func_EVP_PKEY_fromdata" = xyes
+then :
+
+	          # with EVP_PKEY_fromdata, check if EC is not disabled
+	          ac_fn_check_decl "$LINENO" "OPENSSL_NO_EC" "ac_cv_have_decl_OPENSSL_NO_EC" "$ac_includes_default
+#include <openssl/evp.h>
+
+" "$ac_c_undeclared_builtin_options" "CFLAGS"
+if test "x$ac_cv_have_decl_OPENSSL_NO_EC" = xyes
+then :
+  as_fn_error $? "OpenSSL does not support ECDSA: please upgrade or rerun with --disable-ecdsa" "$LINENO" 5
+
+fi
+
+else $as_nop
+
+		  # without EVP_PKEY_fromdata, older openssl, check for support
+		  ac_fn_c_check_func "$LINENO" "ECDSA_sign" "ac_cv_func_ECDSA_sign"
 if test "x$ac_cv_func_ECDSA_sign" = xyes
 then :
 
@@ -21198,12 +21267,15 @@ else $as_nop
   as_fn_error $? "OpenSSL does not support ECDSA: please upgrade or rerun with --disable-ecdsa" "$LINENO" 5
 fi
 
-	      ac_fn_c_check_func "$LINENO" "SHA384_Init" "ac_cv_func_SHA384_Init"
+		  ac_fn_c_check_func "$LINENO" "SHA384_Init" "ac_cv_func_SHA384_Init"
 if test "x$ac_cv_func_SHA384_Init" = xyes
 then :
 
 else $as_nop
   as_fn_error $? "OpenSSL does not support SHA384: please upgrade or rerun with --disable-ecdsa" "$LINENO" 5
+fi
+
+
 fi
 
 	      ac_fn_check_decl "$LINENO" "NID_X9_62_prime256v1" "ac_cv_have_decl_NID_X9_62_prime256v1" "$ac_includes_default
@@ -23733,7 +23805,7 @@ then :
 
 else $as_nop
 
-
+                if test -n "$PKG_CONFIG"; then
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for PROTOBUFC" >&5
@@ -23794,36 +23866,36 @@ fi
 	echo "$PROTOBUFC_PKG_ERRORS" >&5
 
 
-                                # pkg-config failed; try falling back to known values
-                                # workaround for protobuf-c includes at old dir before protobuf-c-1.0.0
-                                if test -f /usr/include/google/protobuf-c/protobuf-c.h; then
-                                    CFLAGS="$CFLAGS -I/usr/include/google"
+                            # pkg-config failed; try falling back to known values
+                            # workaround for protobuf-c includes at old dir before protobuf-c-1.0.0
+                            if test -f /usr/include/google/protobuf-c/protobuf-c.h; then
+                                CFLAGS="$CFLAGS -I/usr/include/google"
+                            else
+                                if test -f /usr/local/include/google/protobuf-c/protobuf-c.h; then
+                                    CFLAGS="$CFLAGS -I/usr/local/include/google"
+                                    LDFLAGS="$LDFLAGS -L/usr/local/lib"
                                 else
-                                    if test -f /usr/local/include/google/protobuf-c/protobuf-c.h; then
-                                        CFLAGS="$CFLAGS -I/usr/local/include/google"
-                                        LDFLAGS="$LDFLAGS -L/usr/local/lib"
-                                    else
-                                        as_fn_error $? "The protobuf-c package was not found with pkg-config. Please install protobuf-c!" "$LINENO" 5
-                                    fi
+                                    as_fn_error $? "The protobuf-c package was not found with pkg-config. Please install protobuf-c!" "$LINENO" 5
                                 fi
+                            fi
 
 
 elif test $pkg_failed = untried; then
      	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
 
-                                # pkg-config failed; try falling back to known values
-                                # workaround for protobuf-c includes at old dir before protobuf-c-1.0.0
-                                if test -f /usr/include/google/protobuf-c/protobuf-c.h; then
-                                    CFLAGS="$CFLAGS -I/usr/include/google"
+                            # pkg-config failed; try falling back to known values
+                            # workaround for protobuf-c includes at old dir before protobuf-c-1.0.0
+                            if test -f /usr/include/google/protobuf-c/protobuf-c.h; then
+                                CFLAGS="$CFLAGS -I/usr/include/google"
+                            else
+                                if test -f /usr/local/include/google/protobuf-c/protobuf-c.h; then
+                                    CFLAGS="$CFLAGS -I/usr/local/include/google"
+                                    LDFLAGS="$LDFLAGS -L/usr/local/lib"
                                 else
-                                    if test -f /usr/local/include/google/protobuf-c/protobuf-c.h; then
-                                        CFLAGS="$CFLAGS -I/usr/local/include/google"
-                                        LDFLAGS="$LDFLAGS -L/usr/local/lib"
-                                    else
-                                        as_fn_error $? "The protobuf-c package was not found with pkg-config. Please install protobuf-c!" "$LINENO" 5
-                                    fi
+                                    as_fn_error $? "The protobuf-c package was not found with pkg-config. Please install protobuf-c!" "$LINENO" 5
                                 fi
+                            fi
 
 
 else
@@ -23832,11 +23904,21 @@ else
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
 
-                                CFLAGS="$CFLAGS $PROTOBUFC_CFLAGS"
-                                LIBS="$LIBS $PROTOBUFC_LIBS"
+                            CFLAGS="$CFLAGS $PROTOBUFC_CFLAGS"
+                            LIBS="$LIBS $PROTOBUFC_LIBS"
 
 fi
-
+                else
+                    # workaround for protobuf-c includes at old dir before protobuf-c-1.0.0
+                    if test -f /usr/include/google/protobuf-c/protobuf-c.h; then
+                        CFLAGS="$CFLAGS -I/usr/include/google"
+                    else
+                        if test -f /usr/local/include/google/protobuf-c/protobuf-c.h; then
+                            CFLAGS="$CFLAGS -I/usr/local/include/google"
+                            LDFLAGS="$LDFLAGS -L/usr/local/lib"
+                        fi
+                    fi
+                fi
 
 
 fi
