@@ -1,3 +1,153 @@
+9 August 2024: Wouter
+	- Fix spelling for the cache-min-negative-ttl entry in the
+	  example.conf.
+	- Tag for release 1.21.0, the repository continues with 1.21.1
+	  in development.
+
+8 August 2024: Wouter
+	- Fix CAMP issues with global quota. Thanks to Huayi Duan, Marco
+	  Bearzi, Jodok Vieli, and Cagin Tanir from NetSec group, ETH Zurich.
+	- Fix CacheFlush issues with limit on NS RRs. Thanks to Yehuda Afek,
+	  Anat Bremler-Barr, Shoham Danino and Yuval Shavitt (Tel-Aviv
+	  University and Reichman University).
+	- Set version number to 1.21.0 for release. This has tag 1.21.0rc1.
+	- Fix that for windows the module startup is called and sets up
+	  the module-config.
+
+2 August 2024: Wouter
+	- Fix that alloc stats has strdup checks, it stops debuggers from
+	  complaining about mismatch at free time.
+	- Fix testbound for alloc stats strdup in util/alloc.c.
+	- Merge #1090: Cookie secret file. Adds
+	  `cookie-secret-file: "unbound_cookiesecrets.txt"` option to store
+	  cookie secrets for EDNS COOKIE secret rollover. The remote control
+	  add_cookie_secret, activate_cookie_secret and drop_cookie_secret
+	  commands can be used for rollover, the command print_cookie_secrets
+	  shows the values in use.
+	- Fix that alloc stats for forwards and hints are printed, and when
+	  alloc stats is enabled, the unit test for unbound control waits for
+	  reloads to complete.
+
+1 August 2024: Wouter
+	- Fix dnstap test program, cleans up to have clean memory on exit,
+	  for tap_data_free, does not delete NULL items. Also it does not try
+	  to free the tail, specifically in the free of the list since that
+	  picked up the next item in the list for its loop causing invalid
+	  free. Added internal unit test to unbound-dnstap-socket for that.
+	- Fix that the worker mem report with alloc stats does not attempt
+	  to print memory use of forwards and hints if they have been
+	  deleted already.
+
+31 July 2024: Wouter
+	- Fix for #1114: Fix that cache fill for forward-host names is
+	  performed, so that with nonzero target-fetch-policy it fetches
+	  forwarder addresses and uses them from cache. Also updated that
+	  delegation point cache fill routines use CDflag for AAAA message
+	  lookups, so that its negative lookup stops a recursion since the
+	  cache uses the bit for disambiguation for dns64 but the recursion
+	  uses CDflag for the AAAA target lookups, so the check correctly
+	  stops a useless recursion by its cache lookup.
+
+30 July 2024: Wouter
+	- Fix to document parameters of auth_zone_verify_zonemd_with_key.
+
+25 July 2024: Wouter
+	- Add root key 38696 from 2024 for DNSSEC validation. It is added
+	  to the default root keys in unbound-anchor. The content can be
+	  inspected with `unbound-anchor -l`.
+
+23 July 2024: Yorgos
+	- Fix #1106: ratelimit-below-domain logs the wrong FROM address.
+	- Cleanup ede.tdir test.
+	- For #935 and #1104, clarify RPZ order and semantics.
+
+23 July 2024: Wouter
+	- Merge #1110: Make fallthrough explicit for libworker.c.
+	- For #1110: Test for fallthrough attribute in configure and add
+	  fallthrough attribute annotations.
+	- Fix compile when the compiler does not support the noreturn
+	  attribute.
+	- Fix to have empty definition when not supported for weak attribute.
+	- Fix uninitialized variable warning in create_tcp_accept_sock.
+	- Fix link of dnstap without openssl.
+	- Fix link of unbound-dnstap-socket without openssl.
+
+19 July 2024: Wouter
+	- Add dnstap-sample-rate that logs only 1/N messages, for high volume
+	  server environments. Thanks Dan Luther.
+	- Fix dnstap wakeup, a running wakeup timer is left to expire and not
+	  increased, a timer is started when the dtio thread is sleeping,
+	  the timer set disabled when the dtio thread goes to sleep, and
+	  after sleep the thread checks to see if there are messages to log
+	  immediately.
+
+16 July 2024: Wouter
+	- For #1103: Fix to drop mesh state reference for the http2 stream
+	  associated with the reply, not the currently active stream. And
+	  it does not remove it twice on a mesh_send_reply call. The reply
+	  h2_stream is NULL when not in use, for more initialisation.
+
+15 July 2024: Wouter
+	- For #1103: fix to also drop mesh state reference when the discard
+	  limit is reached, when there is an error making a new recursion
+	  state and when the connection is dropped with is_drop.
+
+12 July 2024: Yorgos
+	- Add RPZ tag tests in acl_interface.tdir.
+	- For #1102: clearer text for using interface-* options for the
+	  loopback interface.
+
+12 July 2024: Wouter
+	- Fix #1103: unbound 1.20.0 segmentation fault with nghttp2.
+	- For #1103: fix to also drop mesh state reference when a h2 reply is
+	  dropped.
+
+10 July 2024: Wouter
+	- For #773: In contrib/unbound.service.in set unbound to start after
+	  network-online.target. Also for contrib/unbound_portable.service.in.
+
+9 July 2024: Yorgos
+	- Update list of known EDE codes.
+
+8 July 2024: Wouter
+	- Fix that validation reason failure that uses string print uses
+	  separate buffer that is passed, from the scratch validation buffer.
+	- Fixup algo_needs_reason string buffer length.
+	- Fix shadowed error string variable in validator dnskey handling.
+
+5 July 2024: Yorgos
+	- Don't check for message TTL changes if the RRsets remain the same.
+
+5 July 2024: Wouter
+	- Fix for neater printout for error for missing DS response.
+	- Fix neater printout.
+	- Fix #1099: Unbound core dump on SIGSEGV.
+	- Fix for #1099: Fix to check for deleted RRset when the contents
+	  is updated and fetched after it is stored, and also check for a
+	  changed RRset.
+
+4 July 2024: Wouter
+	- Fix to print details about the failure to lookup a DNSKEY record
+	  when validation fails due to the missing DNSKEY. Also for key prime
+	  and DS lookups.
+
+3 July 2024: Yorgos
+	- Fix for repeated use of a DNAME record: first overallocate and then
+	  move the exact size of the init value to avoid false positive heap
+	  overflow reads from address sanitizers.
+
+3 July 2024: Wouter
+	- Fix #144: Port ipset to BSD pf tables.
+	- Add unit test skip files and bison and flex output to gitignore.
+	- Fix to use modstack_init in zonemd unit test.
+	- Fix to remove unneeded linebreak in fptr_wlist.c.
+	- Fix compile warnings in fptr_wlist.c.
+
+2 July 2024: Wouter
+	- Fix to remove unused include from the readzone test program.
+	- Fix unused variable warning in do_cache_remove.
+	- Fix compile warning in worker pthread id printout.
+
 17 June 2024: Wouter
 	- Fix ip-ratelimit-cookie setting, it was not applied.
 
