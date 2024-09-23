@@ -70,6 +70,8 @@
 #include "sldns/parseutil.h"
 #include "sldns/sbuffer.h"
 
+/* number of packets */
+int MAX_GLOBAL_QUOTA = 128;
 /* in msec */
 int UNKNOWN_SERVER_NICENESS = 376;
 /* in msec */
@@ -252,7 +254,7 @@ error_supers(struct module_qstate* qstate, int id, struct module_qstate* super)
 		} else {
 			/* see if the failure did get (parent-lame) info */
 			if(!cache_fill_missing(super->env, super_iq->qchase.qclass,
-				super->region, super_iq->dp))
+				super->region, super_iq->dp, 0))
 				log_err("out of memory adding missing");
 		}
 		delegpt_mark_neg(dpns, qstate->qinfo.qtype);
@@ -363,6 +365,48 @@ error_response_cache(struct module_qstate* qstate, int id, int rcode)
 	iter_dns_store(qstate->env, &qstate->qinfo, &err, 0, 0, 0, NULL,
 		qstate->query_flags, qstate->qstarttime);
 	return error_response(qstate, id, rcode);
+}
+
+/** limit NSEC and NSEC3 TTL in response, RFC9077 */
+static void
+limit_nsec_ttl(struct dns_msg* msg)
+{
+	size_t i;
+	int found = 0;
+	time_t soa_ttl = 0;
+	/* Limit the NSEC and NSEC3 TTL values to the SOA TTL and SOA minimum
+	 * TTL. That has already been applied to the SOA record ttl. */
+	for(i=0; i<msg->rep->rrset_count; i++) {
+		struct ub_packed_rrset_key* s = msg->rep->rrsets[i];
+		if(ntohs(s->rk.type) == LDNS_RR_TYPE_SOA) {
+			struct packed_rrset_data* soadata = (struct packed_rrset_data*)s->entry.data;
+			found = 1;
+			soa_ttl = soadata->ttl;
+			break;
+		}
+	}
+	if(!found)
+		return;
+	for(i=0; i<msg->rep->rrset_count; i++) {
+		struct ub_packed_rrset_key* s = msg->rep->rrsets[i];
+		if(ntohs(s->rk.type) == LDNS_RR_TYPE_NSEC ||
+			ntohs(s->rk.type) == LDNS_RR_TYPE_NSEC3) {
+			struct packed_rrset_data* data = (struct packed_rrset_data*)s->entry.data;
+			/* Limit the negative TTL. */
+			if(data->ttl > soa_ttl) {
+				if(verbosity >= VERB_ALGO) {
+					char buf[256];
+					snprintf(buf, sizeof(buf),
+						"limiting TTL %d of %s record to the SOA TTL of %d for",
+						(int)data->ttl, ((ntohs(s->rk.type) == LDNS_RR_TYPE_NSEC)?"NSEC":"NSEC3"), (int)soa_ttl);
+					log_nametypeclass(VERB_ALGO, buf,
+						s->rk.dname, ntohs(s->rk.type),
+						ntohs(s->rk.rrset_class));
+				}
+				data->ttl = soa_ttl;
+			}
+		}
+	}
 }
 
 /** check if prepend item is duplicate item */
@@ -1569,7 +1613,7 @@ processInitRequest(struct module_qstate* qstate, struct iter_qstate* iq,
 			return error_response(qstate, id, LDNS_RCODE_SERVFAIL);
 		}
 		if(!cache_fill_missing(qstate->env, iq->qchase.qclass,
-			qstate->region, iq->dp)) {
+			qstate->region, iq->dp, 0)) {
 			errinf(qstate, "malloc failure, copy extra info into delegation point");
 			return error_response(qstate, id, LDNS_RCODE_SERVFAIL);
 		}
@@ -2150,6 +2194,15 @@ processLastResort(struct module_qstate* qstate, struct iter_qstate* iq,
 		verbose(VERB_QUERY, "configured stub or forward servers failed -- returning SERVFAIL");
 		return error_response_cache(qstate, id, LDNS_RCODE_SERVFAIL);
 	}
+	if(qstate->env->cfg->harden_unverified_glue) {
+		if(!cache_fill_missing(qstate->env, iq->qchase.qclass,
+			qstate->region, iq->dp, PACKED_RRSET_UNVERIFIED_GLUE))
+			log_err("out of memory in cache_fill_missing");
+		if(iq->dp->usable_list) {
+			verbose(VERB_ALGO, "try unverified glue from cache");
+			return next_state(iq, QUERYTARGETS_STATE);
+		}
+	}
 	if(!iq->dp->has_parent_side_NS && dname_is_root(iq->dp->name)) {
 		struct delegpt* dp;
 		int nolock = 0;
@@ -2192,7 +2245,7 @@ processLastResort(struct module_qstate* qstate, struct iter_qstate* iq,
 	}
 	/* see if that makes new names available */
 	if(!cache_fill_missing(qstate->env, iq->qchase.qclass, 
-		qstate->region, iq->dp))
+		qstate->region, iq->dp, 0))
 		log_err("out of memory in cache_fill_missing");
 	if(iq->dp->usable_list) {
 		verbose(VERB_ALGO, "try parent-side-name, w. glue from cache");
@@ -3424,7 +3477,7 @@ processQueryResponse(struct module_qstate* qstate, struct iter_qstate* iq,
 				old_dp->name, old_dp->namelen);
 		}
 		if(!cache_fill_missing(qstate->env, iq->qchase.qclass, 
-			qstate->region, iq->dp)) {
+			qstate->region, iq->dp, 0)) {
 			errinf(qstate, "malloc failure, copy extra info into delegation point");
 			return error_response(qstate, id, LDNS_RCODE_SERVFAIL);
 		}
@@ -4355,7 +4408,10 @@ process_response(struct module_qstate* qstate, struct iter_qstate* iq,
 	if(verbosity >= VERB_ALGO)
 		log_dns_msg("incoming scrubbed packet:", &iq->response->qinfo, 
 			iq->response->rep);
-	
+
+	if(qstate->env->cfg->aggressive_nsec) {
+		limit_nsec_ttl(iq->response);
+	}
 	if(event == module_event_capsfail || iq->caps_fallback) {
 		if(qstate->env->cfg->qname_minimisation &&
 			iq->minimisation_state != DONOT_MINIMISE_STATE) {

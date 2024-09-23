@@ -1048,6 +1048,11 @@ payload is very large.
 .B harden\-glue: \fI<yes or no>
 Will trust glue only if it is within the servers authority. Default is yes.
 .TP
+.B harden\-unverified\-glue: \fI<yes or no>
+Will trust only in-zone glue. Will try to resolve all out of zone
+(\fI<unverfied>) glue. Will fallback to the original glue if unable to resolve.
+Default is no.
+.TP
 .B harden\-dnssec\-stripped: \fI<yes or no>
 Require DNSSEC data for trust\-anchored zones, if such data is absent,
 the zone becomes bogus. If turned off, and no DNSSEC data is received
@@ -1957,6 +1962,23 @@ Changing this value needs caution as it can allow long CNAME chains to be
 accepted, where Unbound needs to verify (resolve) each link individually.
 Default is 11.
 .TP 5
+.B iter\-scrub\-ns: \fI<number>
+Limit on the number of NS records allowed in an rrset of type NS, from the
+iterator scrubber. This protects the internals of the resolver from overly
+large NS sets. Default is 20.
+.TP 5
+.B iter\-scrub\-cname: \fI<number>
+Limit on the number of CNAME, DNAME records in an answer, from the iterator
+scrubber. This protects the internals of the resolver from overly long
+indirection chains. Clips off the remainder of the reply packet at that point.
+Default is 11.
+.TP 5
+.B max\-global\-quota: \fI<number>
+Limit on the number of upstream queries sent out for an incoming query and
+its subqueries from recursion. It is not reset during the resolution. When
+it is exceeded the query is failed and the lookup process stops.
+Default is 128.
+.TP 5
 .B fast\-server\-permil: \fI<number>
 Specify how many times out of 1000 to pick from the set of fastest servers.
 0 turns the feature off.  A value of 900 would pick from the fastest
@@ -2787,6 +2809,14 @@ If this timeout expires Unbound closes the connection, treats it as
 if the Redis server does not have the requested data, and will try to
 re-establish a new connection later.
 This option defaults to 100 milliseconds.
+.TP
+.B redis-command-timeout: \fI<msec>\fR
+The timeout to use for redis commands, in milliseconds. If 0, it uses the
+redis\-timeout value. The default is 0.
+.TP
+.B redis-connect-timeout: \fI<msec>\fR
+The timeout to use for redis connection set up, in milliseconds. If 0, it
+uses the redis\-timeout value. The default is 0.
 .TP
 .B redis-expire-records: \fI<yes or no>
 If Redis record expiration is enabled.  If yes, Unbound sets timeout for Redis

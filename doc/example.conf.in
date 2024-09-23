@@ -187,6 +187,15 @@ server:
 	# query upon encountering a CNAME record.
 	# max-query-restarts: 11
 
+	# Limit on number of NS records in NS RRset for incoming packets.
+	# iter-scrub-ns: 20
+
+	# Limit on number of CNAME, DNAME records for incoming packets.
+	# iter-scrub-cname: 11
+
+	# Limit on upstream queries for an incoming query and its recursion.
+	# max-global-quota: 128
+
 	# msec for waiting for an unknown server to reply.  Increase if you
 	# are behind a slow satellite link, to eg. 1128.
 	# unknown-server-time-limit: 376
@@ -523,6 +532,9 @@ server:
 
 	# Harden against out of zone rrsets, to avoid spoofing attempts.
 	# harden-glue: yes
+
+	# Harden against unverified (outside-zone, including sibling zone) glue rrsets
+	# harden-unverified-glue: no
 
 	# Harden against receiving dnssec-stripped data. If you turn it
 	# off, failing to validate dnskey data for a trustanchor will
@@ -1289,6 +1301,10 @@ remote-control:
 #     # redis-server-password: ""
 #     # timeout (in ms) for communication with the redis server
 #     redis-timeout: 100
+#     # timeout (in ms) for commands, if 0, uses redis-timeout.
+#     redis-command-timeout: 0
+#     # timeout (in ms) for connection set up, if 0, uses redis-timeout.
+#     redis-connect-timeout: 0
 #     # set timeout on redis records based on DNS response TTL
 #     redis-expire-records: no
 #     # redis logical database to use, 0 is the default database.

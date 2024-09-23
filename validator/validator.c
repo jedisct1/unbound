@@ -97,8 +97,8 @@ fill_nsec3_iter(struct val_env* ve, char* s, int c)
 	int i;
 	free(ve->nsec3_keysize);
 	free(ve->nsec3_maxiter);
-	ve->nsec3_keysize = (size_t*)calloc(sizeof(size_t), (size_t)c);
-	ve->nsec3_maxiter = (size_t*)calloc(sizeof(size_t), (size_t)c);
+	ve->nsec3_keysize = (size_t*)calloc((size_t)c, sizeof(size_t));
+	ve->nsec3_maxiter = (size_t*)calloc((size_t)c, sizeof(size_t));
 	if(!ve->nsec3_keysize || !ve->nsec3_maxiter) {
 		log_err("out of memory");
 		return 0;
@@ -2617,6 +2617,14 @@ val_operate(struct module_qstate* qstate, enum module_ev event, int id,
 			qstate->ext_state[id] = module_finished;
 			return;
 		}
+		if(qstate->rpz_applied) {
+			verbose(VERB_ALGO, "rpz applied, mark it as insecure");
+			if(qstate->return_msg)
+				qstate->return_msg->rep->security =
+					sec_status_insecure;
+			qstate->ext_state[id] = module_finished;
+			return;
+		}
 		/* qclass ANY should have validation result from spawned 
 		 * queries. If we get here, it is bogus or an internal error */
 		if(qstate->qinfo.qclass == LDNS_RR_CLASS_ANY) {
@@ -3053,6 +3061,14 @@ process_ds_response(struct module_qstate* qstate, struct val_qstate* vq,
 	int ret;
 	*suspend = 0;
 	vq->empty_DS_name = NULL;
+	if(sub_qstate && sub_qstate->rpz_applied) {
+		verbose(VERB_ALGO, "rpz was applied to the DS lookup, "
+			"make it insecure");
+		vq->key_entry = NULL;
+		vq->state = VAL_FINISHED_STATE;
+		vq->chase_reply->security = sec_status_insecure;
+		return;
+	}
 	ret = ds_response_to_ke(qstate, vq, id, rcode, msg, qinfo, &dske,
 		sub_qstate);
 	if(ret != 0) {
@@ -3145,6 +3161,15 @@ process_dnskey_response(struct module_qstate* qstate, struct val_qstate* vq,
 	char reasonbuf[256];
 	char* reason = NULL;
 	sldns_ede_code reason_bogus = LDNS_EDE_DNSSEC_BOGUS;
+
+	if(sub_qstate && sub_qstate->rpz_applied) {
+		verbose(VERB_ALGO, "rpz was applied to the DNSKEY lookup, "
+			"make it insecure");
+		vq->key_entry = NULL;
+		vq->state = VAL_FINISHED_STATE;
+		vq->chase_reply->security = sec_status_insecure;
+		return;
+	}
 
 	if(rcode == LDNS_RCODE_NOERROR)
 		dnskey = reply_find_answer_rrset(qinfo, msg->rep);

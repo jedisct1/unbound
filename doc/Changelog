@@ -1,3 +1,81 @@
+23 September 2024: Wouter
+	- Fix dns64 with prefetch that the prefetch is stored in cache.
+
+23 September 2024: Yorgos
+	- Fix doxygen warnings by commenting out CLANG_ASSISTED_PARSING,
+	  CLANG_ADD_INC_PATHS, CLANG_OPTIONS and CLANG_DATABASE_PATH; they were
+	  already disabled.
+
+17 September 2024: Wouter
+	- Add redis-command-timeout: 20 and redis-connect-timeout: 200,
+	  that can set the timeout separately for commands and the
+	  connection set up to the redis server. If they are not
+	  specified, the redis-timeout value is used.
+
+16 September 2024: Wouter
+	- Merge #1140: Fix spelling mistake in comments.
+
+11 September 2024: Yorgos
+	- Fix and add comments in testdata/val_negcache_ttl.rpl.
+
+10 September 2024: Wouter
+	- Fix to limit NSEC and NSEC3 TTL when aggressive nsec is
+	  enabled (RFC9077).
+	- Add unit test for ttl limit for aggressive nsec.
+
+6 September 2024: Yorgos
+	- Fix alloc-size and calloc-transposed-args compiler warnings.
+	- Fix comment to not trigger doxygen unknown command.
+
+5 September 2024: Wouter
+	- Fix config file read for dnstap-sample-rate.
+
+2 September 2024: Wouter
+	- Merge #1135: Add new IANA trust anchor.
+
+30 August 2024: Wouter
+	- Merge #1132: b.root renumbering.
+	- Fix for #1132, adjusted unit test for change in the test file.
+	- Fix for #1132, comment about adjusted copy of reference check.
+
+29 August 2024: Wouter
+	- Unit test for auth zone transfer TLS, and TLS failure.
+	- Fix to print port number in logs for auth zone transfer activities.
+
+28 August 2024: Wouter
+	- Fix that when rpz is applied the message does not get picked up by
+	  the validator. That stops validation failures for the message.
+	- Fix that stub-zone and forward-zone clauses do not exhaust memory
+	  for long content.
+
+27 August 2024: Wouter
+	- Fix #1130: Loads of logs: "validation failure: key for validation
+	  <domain>. is marked as invalid because of a previous" for
+	  non-DNSSEC signed zone.
+
+23 August 2024: Wouter
+	- Merge patch to fix for glue that is outside of zone, with
+	  `harden-unverified-glue`, from Karthik Umashankar (Microsoft).
+	  Enabling this option protects the Unbound resolver against bad
+	  glue, that is unverified out of zone glue, by resolving them.
+	  It uses the records as last resort if there is no other working
+	  glue.
+	- Fix #1127: error: "memory exhausted" when defining more than 9994
+	  local-zones.
+	- Fix documentation for cache_fill_missing function.
+
+21 August 2024: Wouter
+	- Add cross platform freebsd, openbsd and netbsd to github ci.
+	- Fix for char signedness warnings on NetBSD.
+
+20 August 2024: Wouter
+	- Add iter-scrub-ns, iter-scrub-cname and max-global-quota
+	  configuration options.
+
+19 August 2024: Wouter
+	- Fix #1126: unbound-control-setup hangs while testing for openssl
+	  presence starting from version 1.21.0.
+
 9 August 2024: Wouter
 	- Fix spelling for the cache-min-negative-ttl entry in the
 	  example.conf.
