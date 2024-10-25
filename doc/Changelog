@@ -1,3 +1,67 @@
+17 October 2024: Wouter
+	- Tag for 1.22.0 release. This did not contain the 1154 fix
+	  from 16 oct. The code repository continues with
+	  version 1.22.1 in development.
+
+16 October 2024: Yorgos
+	- Fix for dnsoverquic and dnstap to use the correct dnstap
+	  environment.
+
+16 October 2024: Wouter
+	- Fix for dnstap with dnscrypt and dnstap without dnsoverquic.
+	- Fix #1154: Tag Incorrectly Applying for Other Interfaces
+	  Using the Same IP. This fix is not for 1.22.0.
+
+14 October 2024: Wouter
+	- Fix to display warning if quic-port is set but dnsoverquic is not
+	  enabled when compiled.
+	- Fix dnsoverquic to extend the number of streams when one is closed.
+
+11 October 2024: Wouter
+	- Fix to disable detection of quic configured ports when quic is
+	  not compiled in.
+	- Fix harden-unverified-glue for AAAA cache_fill_missing lookups.
+	- Fix contrib/aaaa-filter-iterator.patch for change in call
+	  signature for cache_fill_missing.
+
+10 October 2024: Wouter
+	- Fix cookie_file test sporadic fails for time change during
+	  the test.
+	- Fix add reallocarray to alloc stats unit test, and disable
+	  override of strdup in unbound-host, and the result of config
+	  get option is freed properly.
+	- Tag for 1.22.0rc1.
+
+9 October 2024: Wouter
+	- Merge #871: DNS over QUIC. This adds `quic-port: 853` and
+	  `quic-size: 8m` that enable dnsoverquic, and the counters
+	  `num.query.quic` and `mem.quic` in the statistics output.
+	  The feature needs to be enabled by compiling with libngtcp2,
+	  with `--with-libngtcp2=path` and libngtcp2 needs openssl+quic,
+	  pass that with `--with-ssl=path` to compile unbound as well.
+	- Fix to limit NSEC TTL for messages from cachedb. Fix to limit the
+	  prefetch ttl for messages after a CNAME with short TTL.
+	- Fix for dnstap compile of doqclient with doq disabled.
+
+8 October 2024: Wouter
+	- Fix #1149: unbound-control-setup hangs sometimes depending on
+	  the openssl version.
+	- Fix #1128: Cannot override tcp-upstream and tls-upstream with
+	  forward-tcp-upstream and forward-tls-upstream.
+
+3 October 2024: Yorgos
+	- Fix CVE-2024-8508, unbounded name compression could lead to denial
+	  of service.
+	- This fix was part of 1.21.1, a security point release on 1.21.0.
+	  The code repository continues with this fix and the version number
+	  1.22.0.
+
+30 September 2024: Wouter
+	- Fix negative cache NSEC3 parameter compares for zero length NSEC3
+	  salt.
+	- Fix unbound dnstap socket test program analyzer warnings about
+	  unused variable assignments and variable initialization.
+
 25 September 2024: Wouter
 	- Fix #1144: [FR] log timestamps in ISO8601 format with timezone.
 	  This adds the option `log-time-iso: yes` that logs in ISO8601
