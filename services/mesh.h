@@ -90,6 +90,11 @@ struct mesh_area {
 	/** rbtree of all current queries (mesh_state.node)*/
 	rbtree_type all;
 
+	/** number of queries for unbound's auth_zones, upstream query */
+	size_t num_query_authzone_up;
+	/** number of queries for unbound's auth_zones, downstream answers */
+	size_t num_query_authzone_down;
+
 	/** count of the total number of mesh_reply entries */
 	size_t num_reply_addrs;
 	/** count of the number of mesh_states that have mesh_replies 
@@ -132,6 +137,10 @@ struct mesh_area {
 	size_t ans_nodata;
 	/** (extended stats) type of applied RPZ action */
 	size_t rpz_action[UB_STATS_RPZ_ACTION_NUM];
+	/** stats, number of queries removed due to discard-timeout */
+	size_t num_queries_discard_timeout;
+	/** stats, number of queries removed due to wait-limit */
+	size_t num_queries_wait_limit;
 
 	/** backup of query if other operations recurse and need the
 	 * network buffers */

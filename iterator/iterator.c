@@ -71,7 +71,7 @@
 #include "sldns/sbuffer.h"
 
 /* number of packets */
-int MAX_GLOBAL_QUOTA = 128;
+int MAX_GLOBAL_QUOTA = 200;
 /* in msec */
 int UNKNOWN_SERVER_NICENESS = 376;
 /* in msec */
@@ -368,7 +368,7 @@ error_response_cache(struct module_qstate* qstate, int id, int rcode)
 	err.security = sec_status_indeterminate;
 	verbose(VERB_ALGO, "store error response in message cache");
 	iter_dns_store(qstate->env, &qstate->qinfo, &err, 0, 0, 0, NULL,
-		qstate->query_flags, qstate->qstarttime);
+		qstate->query_flags, qstate->qstarttime, qstate->is_valrec);
 	return error_response(qstate, id, rcode);
 }
 
@@ -2741,9 +2741,7 @@ processQueryTargets(struct module_qstate* qstate, struct iter_qstate* iq,
 		if((iq->chase_flags&BIT_RD) && !(iq->response->rep->flags&BIT_AA)) {
 			verbose(VERB_ALGO, "forwarder, ignoring referral from auth zone");
 		} else {
-			lock_rw_wrlock(&qstate->env->auth_zones->lock);
-			qstate->env->auth_zones->num_query_up++;
-			lock_rw_unlock(&qstate->env->auth_zones->lock);
+			qstate->env->mesh->num_query_authzone_up++;
 			iq->num_current_queries++;
 			iq->chase_to_rd = 0;
 			iq->dnssec_lame_query = 0;
@@ -3296,6 +3294,16 @@ processQueryResponse(struct module_qstate* qstate, struct iter_qstate* iq,
 			iq->num_target_queries = 0;
 			return processDSNSFind(qstate, iq, id);
 		}
+		if(iq->qchase.qtype == LDNS_RR_TYPE_DNSKEY && SERVE_EXPIRED
+			&& qstate->is_valrec &&
+			reply_find_answer_rrset(&iq->qchase, iq->response->rep) != NULL) {
+			/* clean out the authority section, if any, so it
+			 * does not overwrite dnssec valid data in the
+			 * validation recursion lookup. */
+			verbose(VERB_ALGO, "make DNSKEY minimal for serve "
+				"expired");
+			iter_make_minimal(iq->response->rep);
+		}
 		if(!qstate->no_cache_store)
 			iter_dns_store(qstate->env, &iq->response->qinfo,
 				iq->response->rep,
@@ -3303,7 +3311,7 @@ processQueryResponse(struct module_qstate* qstate, struct iter_qstate* iq,
 				qstate->prefetch_leeway,
 				iq->dp&&iq->dp->has_parent_side_NS,
 				qstate->region, qstate->query_flags,
-				qstate->qstarttime);
+				qstate->qstarttime, qstate->is_valrec);
 		/* close down outstanding requests to be discarded */
 		outbound_list_clear(&iq->outlist);
 		iq->num_current_queries = 0;
@@ -3397,7 +3405,7 @@ processQueryResponse(struct module_qstate* qstate, struct iter_qstate* iq,
 			/* no prefetch-leeway, since its not the answer */
 			iter_dns_store(qstate->env, &iq->response->qinfo,
 				iq->response->rep, 1, 0, 0, NULL, 0,
-				qstate->qstarttime);
+				qstate->qstarttime, qstate->is_valrec);
 			if(iq->store_parent_NS)
 				iter_store_parentside_NS(qstate->env, 
 					iq->response->rep);
@@ -3527,7 +3535,8 @@ processQueryResponse(struct module_qstate* qstate, struct iter_qstate* iq,
 			iter_dns_store(qstate->env, &iq->response->qinfo,
 				iq->response->rep, 1, qstate->prefetch_leeway,
 				iq->dp&&iq->dp->has_parent_side_NS, NULL,
-				qstate->query_flags, qstate->qstarttime);
+				qstate->query_flags, qstate->qstarttime,
+				qstate->is_valrec);
 		/* set the current request's qname to the new value. */
 		iq->qchase.qname = sname;
 		iq->qchase.qname_len = snamelen;
@@ -4154,7 +4163,7 @@ processFinished(struct module_qstate* qstate, struct iter_qstate* iq,
 				iq->response->rep, 0, qstate->prefetch_leeway,
 				iq->dp&&iq->dp->has_parent_side_NS,
 				qstate->region, qstate->query_flags,
-				qstate->qstarttime);
+				qstate->qstarttime, qstate->is_valrec);
 		}
 	}
 	qstate->return_rcode = LDNS_RCODE_NOERROR;
