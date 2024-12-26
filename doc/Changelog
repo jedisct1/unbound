@@ -1,3 +1,24 @@
+20 December 2024: Yorgos
+	- For #1207: [FR] Support for RESINFO RRType 261 (RFC9606), add
+	  LDNS_RR_TYPE_RESINFO similar to LDNS_RR_TYPE_TXT.
+
+13 December 2024: Yorgos
+	- Merge #1204: ci: set persist-credentials: false for actions/checkout
+	  per zizmor suggestion.
+
+3 December 2024: Yorgos
+	- Merge #1189: Fix the dname_str method to cause conversion errors
+	  when the domain name length is 255.
+	- Merge #1197: dname_str() fixes.
+	- For #1175, the default value of serve-expired-ttl is set to 86400
+	  (1 day) as suggested by RFC8767.
+	- Merge #1198: Fix log-servfail with serve expired and no useful cache
+	  contents.
+	- Safeguard alias loop while looking in the cache for expired answers.
+	- Merge #1187: Create the SSL_CTX for QUIC before chroot and privilege
+	  drop.
+	- Fix typo in log_servfail.tdir test.
+
 22 November 2024: Yorgos
 	- Fix #1175: serve-expired does not adhere to secure-by-default
 	  principle. The default value of serve-expired-client-timeout
