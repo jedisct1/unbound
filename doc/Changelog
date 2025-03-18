@@ -1,3 +1,87 @@
+18 March 2025: Wouter
+	- Fix #1251: WSAPoll first argument cannot be NULL.
+	- Fix for windows compile create ssl contexts.
+
+17 March 2025: Wouter
+	- Fix representation of types GPOS and RESINFO, add rdf type for
+	  unquoted str.
+
+16 March 2025: Yorgos
+	- Fix 'unbound-control flush_negative' when reporting removed data;
+	  reported by David 'eqvinox' Lamparter.
+
+28 February 2025: Wouter
+	- Merge #1238: Prefer SOURCE_DATE_EPOCH over actual time.
+	  Add --help output description for the SOURCE_DATE_EPOCH variable.
+
+25 February 2025: Wouter
+	- Merge #1243: Do not shadow tm on line 236.
+
+24 February 2025: Yorgos
+	- Fix hash calculation for cachedb to ignore case. Previously, cached
+	  records there were only relevant for same case queries (if not
+	  already in Unbound's internal cache).
+
+19 February 2025: Yorgos
+	- Fix static analysis report about unhandled EOF on error conditions
+	  when reading anchor key files.
+	- Merge #1241: Fix infra-keep-probing for low infra-cache-max-rtt
+	  values.
+
+17 February 2025: Yorgos
+	- Consider reconfigurations when calculating the still_useful_timeout
+	  for servers in the infrastructure cache.
+
+30 January 2025: Wouter
+	- Fix #986: Resolving sas.com with dnssec-validation fails though
+	  signed delegations seem to be (mostly) correct.
+
+29 January 2025: Yorgos
+	- Make the default value of module-config "validator iterator"
+	  regardless of compilation options. --enable-subnet would implicitly
+	  change the value to enable the subnetcache module by default in the
+	  past.
+
+24 January 2025: Yorgos
+	- Merge #1220 from Petr Menšík, Add unbound members group access to
+	  control key.
+
+21 January 2025: Yorgos
+	- Use the same interface listening port discovery code for all needed
+	  protocols.
+	- Port to string only when needed before getaddrinfo().
+	- Do not open unencrypted channels next to encrypted ones on the same
+	  port.
+	- Merge #1224 from Theo Buehler: Do not use DSA API unless USE_DSA is
+	  set.
+
+21 January 2025: Wouter
+	- Fix compile of interface check code when dnscrypt or quic is
+	  disabled.
+	- Fix encoding of RR type ATMA.
+	- Fix to check length in ATMA string to wire.
+	- Merge #1229: check before use daemon->shm_info.
+
+20 January 2025: Yorgos
+	- Merge #1222: Unique DoT and DoH SSL contexts to allow for different
+	  ALPN.
+	- Create the quic SSL listening context only when needed.
+
+15 January 2025: Yorgos
+	- Merge #1221: Consider auth zones when checking for forwarders.
+
+14 January 2025: Yorgos
+	- Add resolver.arpa and service.arpa to the default locally served
+	  zones.
+
+13 January 2025: Yorgos
+	- Fix #1213: Misleading error message on default access control causing
+	  refuse.
+
+10 January 2025: Yorgos
+	- Merge #1214: Use TCP_NODELAY on TLS sockets to speed up the TLS
+	  handshake.
+
 31 December 2024: Yorgos
 	- Merge #1174: Serve expired cache update fixes. Fixes a regression bug
 	  with serve-expired that appeared in 1.22.0 and would not allow the

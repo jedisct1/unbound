@@ -938,7 +938,8 @@ listen_create(struct comm_base* base, struct listen_port* ATTR_UNUSED(ports),
 	char* ATTR_UNUSED(http_endpoint),
 	int ATTR_UNUSED(http_notls),
 	struct tcl_list* ATTR_UNUSED(tcp_conn_limit),
-	void* ATTR_UNUSED(sslctx), void* ATTR_UNUSED(quic_ssl),
+	void* ATTR_UNUSED(dot_sslctx), void* ATTR_UNUSED(doh_sslctx),
+	void* ATTR_UNUSED(quic_ssl),
 	struct dt_env* ATTR_UNUSED(dtenv),
 	struct doq_table* ATTR_UNUSED(table),
 	struct ub_randstate* ATTR_UNUSED(rnd),
@@ -1938,7 +1939,8 @@ int comm_point_send_udp_msg(struct comm_point *c, sldns_buffer* packet,
 }
 
 int outnet_get_tcp_fd(struct sockaddr_storage* ATTR_UNUSED(addr),
-	socklen_t ATTR_UNUSED(addrlen), int ATTR_UNUSED(tcp_mss), int ATTR_UNUSED(dscp))
+	socklen_t ATTR_UNUSED(addrlen), int ATTR_UNUSED(tcp_mss),
+	int ATTR_UNUSED(dscp), int ATTR_UNUSED(nodelay))
 {
 	log_assert(0);
 	return -1;
