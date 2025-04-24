@@ -314,6 +314,11 @@ struct ub_event_base* comm_base_internal(struct comm_base* b)
 	return b->eb->base;
 }
 
+struct ub_event* comm_point_internal(struct comm_point* c)
+{
+	return c->ev->ev;
+}
+
 /** see if errno for udp has to be logged or not uses globals */
 static int
 udp_send_errno_needs_log(struct sockaddr* addr, socklen_t addrlen)
@@ -369,6 +374,15 @@ udp_send_errno_needs_log(struct sockaddr* addr, socklen_t addrlen)
 		(struct sockaddr_storage*)addr, addrlen) &&
 		verbosity < VERB_DETAIL)
 		return 0;
+#  ifdef ENOTCONN
+	/* For 0.0.0.0, ::0 targets it can return that socket is not connected.
+	 * This can be ignored, and the address skipped. It remains
+	 * possible to send there for completeness in configuration. */
+	if(errno == ENOTCONN && addr_is_any(
+		(struct sockaddr_storage*)addr, addrlen) &&
+		verbosity < VERB_DETAIL)
+		return 0;
+#  endif
 	return 1;
 }
 
@@ -442,9 +456,9 @@ comm_point_send_udp_msg(struct comm_point *c, sldns_buffer* packet,
 				int pret;
 				memset(&p, 0, sizeof(p));
 				p.fd = c->fd;
-				p.events = POLLOUT | POLLERR
+				p.events = POLLOUT
 #ifndef USE_WINSOCK
-					| POLLHUP
+					| POLLERR | POLLHUP
 #endif
 					;
 #  ifndef USE_WINSOCK
@@ -469,7 +483,7 @@ comm_point_send_udp_msg(struct comm_point *c, sldns_buffer* packet,
 #  ifdef EWOULDBLOCK
 					errno != EWOULDBLOCK &&
 #  endif
-					errno != ENOBUFS
+					errno != ENOMEM && errno != ENOBUFS
 #else
 					WSAGetLastError() != WSAEINPROGRESS &&
 					WSAGetLastError() != WSAEINTR &&
@@ -482,15 +496,19 @@ comm_point_send_udp_msg(struct comm_point *c, sldns_buffer* packet,
 					return 0;
 				} else if((pret < 0 &&
 #ifndef USE_WINSOCK
-					errno == ENOBUFS
+					( errno == ENOBUFS  /* Maybe some systems */
+					|| errno == ENOMEM  /* Linux */
+					|| errno == EAGAIN)  /* Macos, solaris, openbsd */
 #else
 					WSAGetLastError() == WSAENOBUFS
 #endif
 					) || (send_nobufs && retries > 0)) {
-					/* ENOBUFS, and poll returned without
+					/* ENOBUFS/ENOMEM/EAGAIN, and poll
+					 * returned without
 					 * a timeout. Or the retried send call
-					 * returned ENOBUFS. It is good to
-					 * wait a bit for the error to clear. */
+					 * returned ENOBUFS/ENOMEM/EAGAIN.
+					 * It is good to wait a bit for the
+					 * error to clear. */
 					/* The timeout is 20*(2^(retries+1)),
 					 * it increases exponentially, starting
 					 * at 40 msec. After 5 tries, 1240 msec
@@ -503,18 +521,15 @@ comm_point_send_udp_msg(struct comm_point *c, sldns_buffer* packet,
 					Sleep((SEND_BLOCKED_WAIT_TIMEOUT/10)<<(retries+1));
 					pret = 0;
 #endif
-					if(pret < 0 &&
+					if(pret < 0
 #ifndef USE_WINSOCK
-						errno != EAGAIN && errno != EINTR &&
+						&& errno != EAGAIN && errno != EINTR &&
 #  ifdef EWOULDBLOCK
 						errno != EWOULDBLOCK &&
 #  endif
-						errno != ENOBUFS
+						errno != ENOMEM && errno != ENOBUFS
 #else
-						WSAGetLastError() != WSAEINPROGRESS &&
-						WSAGetLastError() != WSAEINTR &&
-						WSAGetLastError() != WSAENOBUFS &&
-						WSAGetLastError() != WSAEWOULDBLOCK
+						/* Sleep does not error */
 #endif
 					) {
 						log_err("poll udp out timer failed: %s",
@@ -756,9 +771,9 @@ comm_point_send_udp_msg_if(struct comm_point *c, sldns_buffer* packet,
 				int pret;
 				memset(&p, 0, sizeof(p));
 				p.fd = c->fd;
-				p.events = POLLOUT | POLLERR
+				p.events = POLLOUT
 #ifndef USE_WINSOCK
-					| POLLHUP
+					| POLLERR | POLLHUP
 #endif
 					;
 #  ifndef USE_WINSOCK
@@ -783,7 +798,7 @@ comm_point_send_udp_msg_if(struct comm_point *c, sldns_buffer* packet,
 #  ifdef EWOULDBLOCK
 					errno != EWOULDBLOCK &&
 #  endif
-					errno != ENOBUFS
+					errno != ENOMEM && errno != ENOBUFS
 #else
 					WSAGetLastError() != WSAEINPROGRESS &&
 					WSAGetLastError() != WSAEINTR &&
@@ -796,15 +811,19 @@ comm_point_send_udp_msg_if(struct comm_point *c, sldns_buffer* packet,
 					return 0;
 				} else if((pret < 0 &&
 #ifndef USE_WINSOCK
-					errno == ENOBUFS
+					( errno == ENOBUFS  /* Maybe some systems */
+					|| errno == ENOMEM  /* Linux */
+					|| errno == EAGAIN)  /* Macos, solaris, openbsd */
 #else
 					WSAGetLastError() == WSAENOBUFS
 #endif
 					) || (send_nobufs && retries > 0)) {
-					/* ENOBUFS, and poll returned without
+					/* ENOBUFS/ENOMEM/EAGAIN, and poll
+					 * returned without
 					 * a timeout. Or the retried send call
-					 * returned ENOBUFS. It is good to
-					 * wait a bit for the error to clear. */
+					 * returned ENOBUFS/ENOMEM/EAGAIN.
+					 * It is good to wait a bit for the
+					 * error to clear. */
 					/* The timeout is 20*(2^(retries+1)),
 					 * it increases exponentially, starting
 					 * at 40 msec. After 5 tries, 1240 msec
@@ -817,18 +836,15 @@ comm_point_send_udp_msg_if(struct comm_point *c, sldns_buffer* packet,
 					Sleep((SEND_BLOCKED_WAIT_TIMEOUT/10)<<(retries+1));
 					pret = 0;
 #endif
-					if(pret < 0 &&
+					if(pret < 0
 #ifndef USE_WINSOCK
-						errno != EAGAIN && errno != EINTR &&
+						&& errno != EAGAIN && errno != EINTR &&
 #  ifdef EWOULDBLOCK
 						errno != EWOULDBLOCK &&
 #  endif
-						errno != ENOBUFS
-#else
-						WSAGetLastError() != WSAEINPROGRESS &&
-						WSAGetLastError() != WSAEINTR &&
-						WSAGetLastError() != WSAENOBUFS &&
-						WSAGetLastError() != WSAEWOULDBLOCK
+						errno != ENOMEM && errno != ENOBUFS
+#else  /* USE_WINSOCK */
+						/* Sleep does not error */
 #endif
 					) {
 						log_err("poll udp out timer failed: %s",
@@ -3043,7 +3059,7 @@ int comm_point_perform_accept(struct comm_point* c,
 			if(verbosity >= 3)
 				log_err_addr("accept rejected",
 				"connection limit exceeded", addr, *addrlen);
-			close(new_fd);
+			sock_close(new_fd);
 			return -1;
 		}
 	}
@@ -3144,6 +3160,40 @@ static int http2_submit_settings(struct http2_session* h2_session)
 }
 #endif /* HAVE_NGHTTP2 */
 
+#ifdef HAVE_NGHTTP2
+/** Delete http2 stream. After session delete or stream close callback */
+static void http2_stream_delete(struct http2_session* h2_session,
+	struct http2_stream* h2_stream)
+{
+	if(h2_stream->mesh_state) {
+		mesh_state_remove_reply(h2_stream->mesh, h2_stream->mesh_state,
+			h2_session->c);
+		h2_stream->mesh_state = NULL;
+	}
+	http2_req_stream_clear(h2_stream);
+	free(h2_stream);
+}
+#endif /* HAVE_NGHTTP2 */
+
+/** delete http2 session server. After closing connection. */
+static void http2_session_server_delete(struct http2_session* h2_session)
+{
+#ifdef HAVE_NGHTTP2
+	struct http2_stream* h2_stream, *next;
+	nghttp2_session_del(h2_session->session); /* NULL input is fine */
+	h2_session->session = NULL;
+	for(h2_stream = h2_session->first_stream; h2_stream;) {
+		next = h2_stream->next;
+		http2_stream_delete(h2_session, h2_stream);
+		h2_stream = next;
+	}
+	h2_session->first_stream = NULL;
+	h2_session->is_drop = 0;
+	h2_session->postpone_drop = 0;
+	h2_session->c->h2_stream = NULL;
+#endif
+	(void)h2_session;
+}
 
 void
 comm_point_tcp_accept_callback(int fd, short event, void* arg)
@@ -3182,6 +3232,8 @@ comm_point_tcp_accept_callback(int fd, short event, void* arg)
 		if(!c_hdl->h2_session ||
 			!http2_submit_settings(c_hdl->h2_session)) {
 			log_warn("failed to submit http2 settings");
+			if(c_hdl->h2_session)
+				http2_session_server_delete(c_hdl->h2_session);
 			return;
 		}
 		if(!c->ssl) {
@@ -3199,14 +3251,23 @@ comm_point_tcp_accept_callback(int fd, short event, void* arg)
 	}
 	if(!c_hdl->ev->ev) {
 		log_warn("could not ub_event_new, dropped tcp");
+#ifdef HAVE_NGHTTP2
+		if(c_hdl->type == comm_http && c_hdl->h2_session)
+			http2_session_server_delete(c_hdl->h2_session);
+#endif
 		return;
 	}
 	log_assert(fd != -1);
 	(void)fd;
 	new_fd = comm_point_perform_accept(c, &c_hdl->repinfo.remote_addr,
 		&c_hdl->repinfo.remote_addrlen);
-	if(new_fd == -1)
+	if(new_fd == -1) {
+#ifdef HAVE_NGHTTP2
+		if(c_hdl->type == comm_http && c_hdl->h2_session)
+			http2_session_server_delete(c_hdl->h2_session);
+#endif
 		return;
+	}
 	/* Copy remote_address to client_address.
 	 * Simplest way/time for streams to do that. */
 	c_hdl->repinfo.client_addrlen = c_hdl->repinfo.remote_addrlen;
@@ -5021,19 +5082,6 @@ struct http2_stream* http2_stream_create(int32_t stream_id)
 	h2_stream->stream_id = stream_id;
 	return h2_stream;
 }
-
-/** Delete http2 stream. After session delete or stream close callback */
-static void http2_stream_delete(struct http2_session* h2_session,
-	struct http2_stream* h2_stream)
-{
-	if(h2_stream->mesh_state) {
-		mesh_state_remove_reply(h2_stream->mesh, h2_stream->mesh_state,
-			h2_session->c);
-		h2_stream->mesh_state = NULL;
-	}
-	http2_req_stream_clear(h2_stream);
-	free(h2_stream);
-}
 #endif
 
 void http2_stream_add_meshstate(struct http2_stream* h2_stream,
@@ -5048,26 +5096,6 @@ void http2_stream_remove_mesh_state(struct http2_stream* h2_stream)
 	if(!h2_stream)
 		return;
 	h2_stream->mesh_state = NULL;
-}
-
-/** delete http2 session server. After closing connection. */
-static void http2_session_server_delete(struct http2_session* h2_session)
-{
-#ifdef HAVE_NGHTTP2
-	struct http2_stream* h2_stream, *next;
-	nghttp2_session_del(h2_session->session); /* NULL input is fine */
-	h2_session->session = NULL;
-	for(h2_stream = h2_session->first_stream; h2_stream;) {
-		next = h2_stream->next;
-		http2_stream_delete(h2_session, h2_stream);
-		h2_stream = next;
-	}
-	h2_session->first_stream = NULL;
-	h2_session->is_drop = 0;
-	h2_session->postpone_drop = 0;
-	h2_session->c->h2_stream = NULL;
-#endif
-	(void)h2_session;
 }
 
 #ifdef HAVE_NGHTTP2
@@ -6908,8 +6936,9 @@ comm_timer_is_set(struct comm_timer* timer)
 }
 
 size_t
-comm_timer_get_mem(struct comm_timer* ATTR_UNUSED(timer))
+comm_timer_get_mem(struct comm_timer* timer)
 {
+	if(!timer) return 0;
 	return sizeof(struct internal_timer);
 }
 

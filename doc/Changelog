@@ -1,3 +1,103 @@
+16 April 2025: Wouter
+	- Increase default to `num-queries-per-thread: 2048`, when unbound is
+	  compiled with libevent. It makes saturation of the task queue more
+	  resource intensive and less practical. Thanks to Shiming Liu,
+	  Network and Information Security Lab, Tsinghua University for the
+	  report.
+
+11 April 2025: Wouter
+	- Tag for 1.23.0rc2. This became the release of 1.23.0 on 24 April
+	  2025. The code repository continues with 1.23.1 in development.
+
+11 April 2025: Yorgos
+	- Merge #1265: Fix WSAPoll.
+
+10 April 2025: Wouter
+	- Fix for print of connection type in log-replies for dot and doh.
+
+9 April 2025: Wouter
+	- Fix to detect if atomic_store links in configure.
+	- Fix #1264: unbound 1.22.0 leaks memory when doing DoH.
+
+8 April 2025: Wouter
+	- Tag for 1.23.0rc1.
+	- Fix fast_reload to print chroot with config file name.
+
+7 April 2025: Yorgos
+	- Merge #902: DNS Error Reporting (RFC 9567). Introduces new
+	  configuration option 'dns-error-reporting' and new statistics for
+	  'num.dns_error_reports'.
+
+4 April 2025: Wouter
+	- Fix mesh_copy_client_info to omit null contents from copy.
+	- Fix comment name in the rpz nsdname test.
+	- Fix nettle compile for warnings and ticket keys.
+	- Fix redis_replica test for unused option defaults and log printout.
+	- Fix test to speed up common.sh script kill_pid.
+	- Fix to update common.sh for speed of kill_pid.
+
+4 April 2025: Yorgos
+	- Merge #1019: Redis read-only replica support.
+	  Introduces new 'redis-replica-*' options for the Redis cache backend.
+
+3 April 2025: Wouter
+	- Fix #1263: Exempt loopback addresses from wait-limit.
+	- Fix wait-limit-netblock and wait-limit-cookie-netblock config parse
+	  to allow two arguments.
+	- Fix ub_event and include dnstap and win_svc headers.
+	- Fix test for stat_values for wait limit defaults for localhost.
+	- Fix parameter unused warning in net_help.c.
+
+2 April 2025: Yorgos
+	- Merge #1262 from markyang92, fix build with
+	  'gcc-15 -Wbuiltin-declaration-mismatch' error in compat/malloc.c.
+	- For #1262, ifdef is no longer needed.
+
+2 April 2025: Wouter
+	- Fix unbound-control test so it counts the new flush_negative output,
+	  also answers the _ta probe from testns and prints command output
+	  and skip a thread specific test when no threads are available.
+	- Fix that ub_event has the facility to deal with callbacks for
+	  fast reload, doq, windows-stop and dnstap.
+	- Fix fast reload test to check if pid exists before acting on it.
+
+1 April 2025: Wouter
+	- Fix escape more characters when printing an RR type with an unquoted
+	  string.
+	- Enable the auth_tls.tdir and auth_tls_failcert.tdir tests.
+
+31 March 2025: Wouter
+	- iana portlist update.
+	- Merge #1042: Fast Reload. The unbound-control fast_reload is added.
+	  It reads changed config in a thread, then only briefly pauses the
+	  service threads, that keep running. DNS service is only interrupted
+	  briefly, less than a second.
+	- Skip the unit tests for auth_tls.tdir and auth_tls_failcert.tdir.
+
+27 March 2025: Wouter
+	- Fix unit test dname log printout typecast.
+	- Fix for ci test, expat is installed on the osx image.
+
+26 March 2025: Yorgos
+	- Fix #1255: Multiple pinnings to vulnerable copies of libexpat.
+	- For #1255, for ios use an older expat version that does not require
+	  C++11 language features.
+	- For #1255, for ios disable building tests that require C++11.
+	- For #1255, for ios try the latest expat version again.
+
+24 March 2025: Wouter
+	- Fix #1254: `send failed: Socket is not connected` and
+	  `remote address is 0.0.0.0 port 53`.
+
+21 March 2025: Wouter
+	- Fix #1253: Cache entries fail to be removed from Redis cachedb
+	  backend with unbound-control flush* +c.
+	- Fix for #1253: Fix for redis cachedb backend to expect an integer
+	  reply for the EXPIRE command.
+
+20 March 2025: Wouter
+	- Fix print of RR type NSAP-PTR, it is an unquoted string.
+
 18 March 2025: Wouter
 	- Fix #1251: WSAPoll first argument cannot be NULL.
 	- Fix for windows compile create ssl contexts.

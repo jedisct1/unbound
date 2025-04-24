@@ -268,7 +268,7 @@ The number of queries that every thread will service simultaneously.
 If more queries arrive that need servicing, and no queries can be jostled out
 (see \fIjostle\-timeout\fR), then the queries are dropped. This forces
 the client to resend after a timeout; allowing the server time to work on
-the existing queries. Default depends on compile options, 512 or 1024.
+the existing queries. Default depends on compile options, 512 or 2048.
 .TP
 .B jostle\-timeout: \fI<msec>
 Timeout used when the server is very busy.  Set to a value that usually
@@ -280,7 +280,7 @@ service by slow queries or high query rates.  Default 200 milliseconds.
 The effect is that the qps for long-lasting queries is about
 (numqueriesperthread / 2) / (average time for such long queries) qps.
 The qps for short queries can be about (numqueriesperthread / 2)
-/ (jostletimeout in whole seconds) qps per thread, about (1024/2)*5 = 2560
+/ (jostletimeout in whole seconds) qps per thread, about (2048/2)*5 = 5120
 qps by default.
 .TP
 .B delay\-close: \fI<msec>
@@ -326,11 +326,15 @@ The wait limit for the netblock. If not given the wait\-limit value is
 used. The most specific netblock is used to determine the limit. Useful for
 overriding the default for a specific, group or individual, server.
 The value -1 disables wait limits for the netblock.
+By default the loopback has a wait limit netblock of -1, it is not limited,
+because it is separated from the rest of network for spoofed packets.
+The loopback addresses 127.0.0.0/8 and ::1/128 are default at -1.
 .TP
 .B wait\-limit\-cookie\-netblock: \fI<netblock> <number>
 The wait limit for the netblock, when the query has a DNS cookie.
 If not given, the wait\-limit\-cookie value is used.
 The value -1 disables wait limits for the netblock.
+The loopback addresses 127.0.0.0/8 and ::1/128 are default at -1.
 .TP
 .B so\-rcvbuf: \fI<number>
 If not 0, then set the SO_RCVBUF socket option to get more buffer
@@ -2085,17 +2089,30 @@ be used.  Default is 65001.
 .TP 5
 .B ede: \fI<yes or no>
 If enabled, Unbound will respond with Extended DNS Error codes (RFC8914).
-These EDEs attach informative error messages to a response for various
-errors. Default is "no".
+These EDEs provide additional information with a response mainly for, but not
+limited to, DNS and DNSSEC errors.
 
 When the \fBval-log-level\fR option is also set to \fB2\fR, responses with
-Extended DNS Errors concerning DNSSEC failures that are not served from cache,
-will also contain a descriptive text message about the reason for the failure.
+Extended DNS Errors concerning DNSSEC failures will also contain a descriptive
+text message about the reason for the failure.
+Default is "no".
 .TP 5
 .B ede\-serve\-expired: \fI<yes or no>
 If enabled, Unbound will attach an Extended DNS Error (RFC8914) Code 3 - Stale
-Answer as EDNS0 option to the expired response. Note that this will not attach
-the EDE code without setting the global \fBede\fR option to "yes" as well.
+Answer as EDNS0 option to the expired response.
+The \fBede\fR option needs to be enabled as well for this to work.
+Default is "no".
+.TP 5
+.B dns\-error\-reporting: \fI<yes or no>
+If enabled, Unbound will send DNS Error Reports (RFC9567).
+The name servers need to express support by attaching the Report-Channel EDNS0
+option on their replies specifying the reporting agent for the zone.
+Any errors encountered during resolution that would result in Unbound
+generating an Extended DNS Error (RFC8914) will be reported to the zone's
+reporting agent.
+The \fBede\fR option does not need to be enabled for this to work.
+It is advised that the \fBqname\-minimisation\fR option is also enabled to
+increase privacy on the outgoing reports.
 Default is "no".
 .SS "Remote Control Options"
 In the
@@ -2856,12 +2873,12 @@ The TCP port number of the Redis server.
 This option defaults to 6379.
 .TP
 .B redis-server-path: \fI<unix socket path>\fR
-The unix socket path to connect to the redis server. Off by default, and it
+The unix socket path to connect to the Redis server. Off by default, and it
 can be set to "" to turn this off. Unix sockets may have better throughput
 than the IP address option.
 .TP
 .B redis-server-password: \fI"<password>"\fR
-The Redis AUTH password to use for the redis server.
+The Redis AUTH password to use for the Redis server.
 Only relevant if Redis is configured for client password authorisation.
 Off by default, and it can be set to "" to turn this off.
 .TP
@@ -2873,12 +2890,14 @@ re-establish a new connection later.
 This option defaults to 100 milliseconds.
 .TP
 .B redis-command-timeout: \fI<msec>\fR
-The timeout to use for redis commands, in milliseconds. If 0, it uses the
-redis\-timeout value. The default is 0.
+The timeout to use for Redis commands, in milliseconds.
+If 0, it uses the \fBredis\-timeout\fR value.
+The default is 0.
 .TP
 .B redis-connect-timeout: \fI<msec>\fR
-The timeout to use for redis connection set up, in milliseconds. If 0, it
-uses the redis\-timeout value. The default is 0.
+The timeout to use for Redis connection set up, in milliseconds.
+If 0, it uses the \fBredis\-timeout\fR value.
+The default is 0.
 .TP
 .B redis-expire-records: \fI<yes or no>
 If Redis record expiration is enabled.  If yes, Unbound sets timeout for Redis
@@ -2897,6 +2916,52 @@ If unsure about using this option, Redis documentation
 for multiple unrelated applications.
 The default database in Redis is 0 while other logical databases need to be
 explicitly SELECT'ed upon connecting.
+This option defaults to 0.
+.TP
+.B redis-replica-server-host: \fI<server address or name>\fR
+The IP (either v6 or v4) address or domain name of the Redis replica server.
+In general an IP address should be specified as otherwise Unbound will have to
+resolve the name of the server every time it establishes a connection
+to the server.
+This server is treated as a read-only replica server
+(https://redis.io/docs/management/replication/#read-only-replica).
+If specified, all Redis read commands will go to this replica server, while
+the write commands will go to the \fBredis-server-host\fR.
+This option defaults to "" (disabled).
+.TP
+.B redis-replica-server-port: \fI<port number>\fR
+The TCP port number of the Redis replica server.
+This option defaults to 6379.
+.TP
+.B redis-replica-server-path: \fI<unix socket path>\fR
+The unix socket path to connect to the Redis server. Off by default, and it
+can be set to "" to turn this off. Unix sockets may have better throughput
+than the IP address option.
+.TP
+.B redis-replica-server-password: \fI"<password>"\fR
+The Redis AUTH password to use for the Redis replica server.
+Only relevant if Redis is configured for client password authorisation.
+Off by default, and it can be set to "" to turn this off.
+.TP
+.B redis-replica-timeout: \fI<msec>\fR
+The period until when Unbound waits for a response from the Redis replica sever.
+If this timeout expires Unbound closes the connection, treats it as
+if the Redis replica server does not have the requested data, and will try to
+re-establish a new connection later.
+This option defaults to 100 milliseconds.
+.TP
+.B redis-replica-command-timeout: \fI<msec>\fR
+The timeout to use for Redis replica commands, in milliseconds.
+If 0, it uses the \fBredis\-replica\-timeout\fR value.
+The default is 0.
+.TP
+.B redis-replica-connect-timeout: \fI<msec>\fR
+The timeout to use for Redis replica connection set up, in milliseconds.
+If 0, it uses the \fBredis\-replica\-timeout\fR value.
+The default is 0.
+.TP
+.B redis-replica-logical-db: \fI<logical database index>
+Same as \fBredis-logical-db\fR but for the Redis replica server.
 This option defaults to 0.
 .SS DNSTAP Logging Options
 DNSTAP support, when compiled in by using \fB\-\-enable\-dnstap\fR, is enabled
