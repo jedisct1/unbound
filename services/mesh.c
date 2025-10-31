@@ -348,7 +348,7 @@ mesh_serve_expired_lookup(struct module_qstate* qstate,
 
 	key = (struct msgreply_entry*)e->key;
 	data = (struct reply_info*)e->data;
-	if(data->ttl < timenow) *is_expired = 1;
+	if(TTL_IS_EXPIRED(data->ttl, timenow)) *is_expired = 1;
 	msg = tomsg(qstate->env, &key->key, data, qstate->region, timenow,
 		qstate->env->cfg->serve_expired, qstate->env->scratch);
 	if(!msg)
@@ -441,9 +441,18 @@ void mesh_new_client(struct mesh_area* mesh, struct query_info* qinfo,
 	if(!infra_wait_limit_allowed(mesh->env->infra_cache, rep,
 		edns->cookie_valid, mesh->env->cfg)) {
 		verbose(VERB_ALGO, "Too many queries waiting from the IP. "
-			"dropping incoming query.");
-		comm_point_drop_reply(rep);
+			"servfail incoming query.");
 		mesh->num_queries_wait_limit++;
+		edns_opt_list_append_ede(&edns->opt_list_out,
+			mesh->env->scratch, LDNS_EDE_OTHER,
+			"Too many queries queued up and waiting from the IP");
+		if(!inplace_cb_reply_servfail_call(mesh->env, qinfo, NULL, NULL,
+			LDNS_RCODE_SERVFAIL, edns, rep, mesh->env->scratch, mesh->env->now_tv))
+				edns->opt_list_inplace_cb_out = NULL;
+		error_encode(r_buffer, LDNS_RCODE_SERVFAIL,
+			qinfo, qid, qflags, edns);
+		regional_free_all(mesh->env->scratch);
+		comm_point_send_reply(rep);
 		return;
 	}
 	if(!unique)
@@ -1152,8 +1161,7 @@ mesh_detect_cycle_found(struct module_qstate* qstate, struct mesh_state* dep_m)
 {
 	struct mesh_state* cyc_m = qstate->mesh_info;
 	size_t counter = 0;
-	if(!dep_m)
-		return 0;
+	log_assert(dep_m);
 	if(dep_m == cyc_m || find_in_subsub(dep_m, cyc_m, &counter)) {
 		if(counter > MESH_MAX_SUBSUB)
 			return 2;
@@ -1190,24 +1198,19 @@ void mesh_detach_subs(struct module_qstate* qstate)
 }
 
 int mesh_add_sub(struct module_qstate* qstate, struct query_info* qinfo,
-        uint16_t qflags, int prime, int valrec, struct module_qstate** newq,
-	struct mesh_state** sub)
+	struct respip_client_info* cinfo, uint16_t qflags, int prime,
+	int valrec, struct module_qstate** newq, struct mesh_state** sub)
 {
 	/* find it, if not, create it */
 	struct mesh_area* mesh = qstate->env->mesh;
-	*sub = mesh_area_find(mesh, NULL, qinfo, qflags,
-		prime, valrec);
-	if(mesh_detect_cycle_found(qstate, *sub)) {
-		verbose(VERB_ALGO, "attach failed, cycle detected");
-		return 0;
-	}
+	*sub = mesh_area_find(mesh, cinfo, qinfo, qflags, prime, valrec);
 	if(!*sub) {
 #ifdef UNBOUND_DEBUG
 		struct rbnode_type* n;
 #endif
 		/* create a new one */
-		*sub = mesh_state_create(qstate->env, qinfo, NULL, qflags, prime,
-			valrec);
+		*sub = mesh_state_create(qstate->env, qinfo, cinfo, qflags,
+			prime, valrec);
 		if(!*sub) {
 			log_err("mesh_attach_sub: out of memory");
 			return 0;
@@ -1230,18 +1233,25 @@ int mesh_add_sub(struct module_qstate* qstate, struct query_info* qinfo,
 		rbtree_insert(&mesh->run, &(*sub)->run_node);
 		log_assert(n != NULL);
 		*newq = &(*sub)->s;
-	} else
+	} else {
 		*newq = NULL;
+		if(mesh_detect_cycle_found(qstate, *sub)) {
+			verbose(VERB_ALGO, "attach failed, cycle detected");
+			return 0;
+		}
+	}
 	return 1;
 }
 
 int mesh_attach_sub(struct module_qstate* qstate, struct query_info* qinfo,
-        uint16_t qflags, int prime, int valrec, struct module_qstate** newq)
+	struct respip_client_info* cinfo, uint16_t qflags, int prime,
+	int valrec, struct module_qstate** newq)
 {
 	struct mesh_area* mesh = qstate->env->mesh;
 	struct mesh_state* sub = NULL;
 	int was_detached;
-	if(!mesh_add_sub(qstate, qinfo, qflags, prime, valrec, newq, &sub))
+	if(!mesh_add_sub(qstate, qinfo, cinfo, qflags, prime, valrec, newq,
+		&sub))
 		return 0;
 	was_detached = (sub->super_set.count == 0);
 	if(!mesh_state_attachment(qstate->mesh_info, sub))
@@ -1684,7 +1694,7 @@ static void dns_error_reporting(struct module_qstate* qstate,
 
 	log_query_info(VERB_ALGO, "DNS Error Reporting: generating report "
 		"query for", &qinfo);
-	if(mesh_add_sub(qstate, &qinfo, BIT_RD, 0, 0, &newq, &sub)) {
+	if(mesh_add_sub(qstate, &qinfo, NULL, BIT_RD, 0, 0, &newq, &sub)) {
 		qstate->env->mesh->num_dns_error_reports++;
 	}
 	return;
@@ -1727,28 +1737,37 @@ void mesh_query_done(struct mesh_state* mstate)
 		dns_error_reporting(&mstate->s, rep);
 
 	for(r = mstate->reply_list; r; r = r->next) {
-		struct timeval old;
-		timeval_subtract(&old, mstate->s.env->now_tv, &r->start_time);
-		if(mstate->s.env->cfg->discard_timeout != 0 &&
-			((int)old.tv_sec)*1000+((int)old.tv_usec)/1000 >
-			mstate->s.env->cfg->discard_timeout) {
-			/* Drop the reply, it is too old */
-			/* briefly set the reply_list to NULL, so that the
-			 * tcp req info cleanup routine that calls the mesh
-			 * to deregister the meshstate for it is not done
-			 * because the list is NULL and also accounting is not
-			 * done there, but instead we do that here. */
-			struct mesh_reply* reply_list = mstate->reply_list;
-			verbose(VERB_ALGO, "drop reply, it is older than discard-timeout");
-			infra_wait_limit_dec(mstate->s.env->infra_cache,
-				&r->query_reply, mstate->s.env->cfg);
-			mstate->reply_list = NULL;
-			if(r->query_reply.c->use_h2)
-				http2_stream_remove_mesh_state(r->h2_stream);
-			comm_point_drop_reply(&r->query_reply);
-			mstate->reply_list = reply_list;
-			mstate->s.env->mesh->num_queries_discard_timeout++;
-			continue;
+		if(mesh_is_udp(r)) {
+			/* For UDP queries, the old replies are discarded.
+			 * This stops a large volume of old replies from
+			 * building up.
+			 * The stream replies, are not discarded. The
+			 * stream is open, the other side is waiting.
+			 * Some answer is needed, even if servfail, but the
+			 * real reply is ready to go, so that is given. */
+			struct timeval old;
+			timeval_subtract(&old, mstate->s.env->now_tv, &r->start_time);
+			if(mstate->s.env->cfg->discard_timeout != 0 &&
+				((int)old.tv_sec)*1000+((int)old.tv_usec)/1000 >
+				mstate->s.env->cfg->discard_timeout) {
+				/* Drop the reply, it is too old */
+				/* briefly set the reply_list to NULL, so that the
+				 * tcp req info cleanup routine that calls the mesh
+				 * to deregister the meshstate for it is not done
+				 * because the list is NULL and also accounting is not
+				 * done there, but instead we do that here. */
+				struct mesh_reply* reply_list = mstate->reply_list;
+				verbose(VERB_ALGO, "drop reply, it is older than discard-timeout");
+				infra_wait_limit_dec(mstate->s.env->infra_cache,
+					&r->query_reply, mstate->s.env->cfg);
+				mstate->reply_list = NULL;
+				if(r->query_reply.c->use_h2)
+					http2_stream_remove_mesh_state(r->h2_stream);
+				comm_point_drop_reply(&r->query_reply);
+				mstate->reply_list = reply_list;
+				mstate->s.env->mesh->num_queries_discard_timeout++;
+				continue;
+			}
 		}
 
 		i++;
@@ -2297,7 +2316,7 @@ mesh_detect_cycle(struct module_qstate* qstate, struct query_info* qinfo,
 	struct mesh_area* mesh = qstate->env->mesh;
 	struct mesh_state* dep_m = NULL;
 	dep_m = mesh_area_find(mesh, NULL, qinfo, flags, prime, valrec);
-	return mesh_detect_cycle_found(qstate, dep_m);
+	return dep_m?mesh_detect_cycle_found(qstate, dep_m):0;
 }
 
 void mesh_list_insert(struct mesh_state* m, struct mesh_state** fp,

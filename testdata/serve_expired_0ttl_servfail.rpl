@@ -3,6 +3,7 @@ server:
 	module-config: "validator iterator"
 	qname-minimisation: "no"
 	minimal-responses: no
+	iter-scrub-promiscuous: no
 	serve-expired: yes
 	serve-expired-client-timeout: 0
 	ede: yes
@@ -101,7 +102,7 @@ ENTRY_BEGIN
 ENTRY_END
 
 ; Wait for the SERVFAIL to expire
-STEP 31 TIME_PASSES ELAPSE 32
+STEP 31 TIME_PASSES ELAPSE 10
 
 ; Query again
 STEP 40 QUERY

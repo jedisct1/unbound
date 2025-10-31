@@ -129,6 +129,7 @@ config_create(void)
 	cfg->tls_cert_bundle = NULL;
 	cfg->tls_win_cert = 0;
 	cfg->tls_use_sni = 1;
+	cfg->tls_use_system_policy_versions = 0;
 	cfg->https_port = UNBOUND_DNS_OVER_HTTPS_PORT;
 	if(!(cfg->http_endpoint = strdup("/dns-query"))) goto error_exit;
 	cfg->http_max_streams = 100;
@@ -421,6 +422,7 @@ config_create(void)
 	cfg->dns_error_reporting = 0;
 	cfg->iter_scrub_ns = 20;
 	cfg->iter_scrub_cname = 11;
+	cfg->iter_scrub_promiscuous = 1;
 	cfg->max_global_quota = 200;
 	return cfg;
 error_exit:
@@ -628,6 +630,7 @@ int config_set_option(struct config_file* cfg, const char* opt,
 	else S_STR("tls-ciphers:", tls_ciphers)
 	else S_STR("tls-ciphersuites:", tls_ciphersuites)
 	else S_YNO("tls-use-sni:", tls_use_sni)
+	else S_YNO("tls-use-system-policy-versions:", tls_use_system_policy_versions)
 	else S_NUMBER_NONZERO("https-port:", https_port)
 	else S_STR("http-endpoint:", http_endpoint)
 	else S_NUMBER_NONZERO("http-max-streams:", http_max_streams)
@@ -765,6 +768,7 @@ int config_set_option(struct config_file* cfg, const char* opt,
 	else S_YNO("dns-error-reporting:", dns_error_reporting)
 	else S_NUMBER_OR_ZERO("iter-scrub-ns:", iter_scrub_ns)
 	else S_NUMBER_OR_ZERO("iter-scrub-cname:", iter_scrub_cname)
+	else S_YNO("iter-scrub-promiscuous:", iter_scrub_promiscuous)
 	else S_NUMBER_OR_ZERO("max-global-quota:", max_global_quota)
 	else S_YNO("serve-original-ttl:", serve_original_ttl)
 	else S_STR("val-nsec3-keysize-iterations:", val_nsec3_key_iterations)
@@ -1179,6 +1183,7 @@ config_get_option(struct config_file* cfg, const char* opt,
 	else O_STR(opt, "tls-ciphers", tls_ciphers)
 	else O_STR(opt, "tls-ciphersuites", tls_ciphersuites)
 	else O_YNO(opt, "tls-use-sni", tls_use_sni)
+	else O_YNO(opt, "tls-use-system-policy-versions", tls_use_system_policy_versions)
 	else O_DEC(opt, "https-port", https_port)
 	else O_STR(opt, "http-endpoint", http_endpoint)
 	else O_UNS(opt, "http-max-streams", http_max_streams)
@@ -1241,6 +1246,7 @@ config_get_option(struct config_file* cfg, const char* opt,
 	else O_YNO(opt, "dns-error-reporting", dns_error_reporting)
 	else O_DEC(opt, "iter-scrub-ns", iter_scrub_ns)
 	else O_DEC(opt, "iter-scrub-cname", iter_scrub_cname)
+	else O_YNO(opt, "iter-scrub-promiscuous", iter_scrub_promiscuous)
 	else O_DEC(opt, "max-global-quota", max_global_quota)
 	else O_YNO(opt, "serve-original-ttl", serve_original_ttl)
 	else O_STR(opt, "val-nsec3-keysize-iterations",val_nsec3_key_iterations)
@@ -2920,6 +2926,29 @@ if_is_quic(const char* ifname, int default_port, int quic_port)
 }
 
 int
+cfg_ports_list_contains(char* ports, int p)
+{
+	char* now = ports, *after;
+	int extraport;
+	while(now && *now) {
+		while(isspace((unsigned char)*now))
+			now++;
+		if(!now)
+			break;
+		after = now;
+		extraport = (int)strtol(now, &after, 10);
+		if(extraport < 0 || extraport > 65535)
+			continue; /* Out of range. */
+		if(extraport == 0 && now == after)
+			return 0; /* Number could not be parsed. */
+		now = after;
+		if(extraport == p)
+			return 1;
+	}
+	return 0;
+}
+
+int
 cfg_has_https(struct config_file* cfg)
 {
 	int i;
@@ -2927,6 +2956,8 @@ cfg_has_https(struct config_file* cfg)
 		if(if_is_https(cfg->ifs[i], cfg->port, cfg->https_port))
 			return 1;
 	}
+	if(cfg_ports_list_contains(cfg->if_automatic_ports, cfg->https_port))
+		return 1;
 	return 0;
 }
 
@@ -2939,6 +2970,8 @@ cfg_has_quic(struct config_file* cfg)
 		if(if_is_quic(cfg->ifs[i], cfg->port, cfg->quic_port))
 			return 1;
 	}
+	if(cfg_ports_list_contains(cfg->if_automatic_ports, cfg->quic_port))
+		return 1;
 	return 0;
 #else
 	(void)cfg;

@@ -199,6 +199,7 @@ extern struct config_parser_state* cfg_parser;
 %token VAR_DISCARD_TIMEOUT VAR_WAIT_LIMIT VAR_WAIT_LIMIT_COOKIE
 %token VAR_WAIT_LIMIT_NETBLOCK VAR_WAIT_LIMIT_COOKIE_NETBLOCK
 %token VAR_STREAM_WAIT_SIZE VAR_TLS_CIPHERS VAR_TLS_CIPHERSUITES VAR_TLS_USE_SNI
+%token VAR_TLS_USE_SYSTEM_POLICY_VERSIONS
 %token VAR_IPSET VAR_IPSET_NAME_V4 VAR_IPSET_NAME_V6
 %token VAR_TLS_SESSION_TICKET_KEYS VAR_RPZ VAR_TAGS VAR_RPZ_ACTION_OVERRIDE
 %token VAR_RPZ_CNAME_OVERRIDE VAR_RPZ_LOG VAR_RPZ_LOG_NAME
@@ -215,6 +216,7 @@ extern struct config_parser_state* cfg_parser;
 %token VAR_LOG_DESTADDR VAR_CACHEDB_CHECK_WHEN_SERVE_EXPIRED
 %token VAR_COOKIE_SECRET_FILE VAR_ITER_SCRUB_NS VAR_ITER_SCRUB_CNAME
 %token VAR_MAX_GLOBAL_QUOTA VAR_HARDEN_UNVERIFIED_GLUE VAR_LOG_TIME_ISO
+%token VAR_ITER_SCRUB_PROMISCUOUS
 
 %%
 toplevelvars: /* empty */ | toplevelvars toplevelvar ;
@@ -346,6 +348,7 @@ content_server: server_num_threads | server_verbosity | server_port |
 	server_tls_ciphersuites | server_tls_session_ticket_keys |
 	server_answer_cookie | server_cookie_secret | server_ip_ratelimit_cookie |
 	server_tls_use_sni | server_edns_client_string |
+	server_tls_use_system_policy_versions |
 	server_edns_client_string_opcode | server_nsid |
 	server_zonemd_permissive_mode | server_max_reuse_tcp_queries |
 	server_tcp_reuse_timeout | server_tcp_auth_query_timeout |
@@ -356,7 +359,7 @@ content_server: server_num_threads | server_verbosity | server_port |
 	server_harden_unknown_additional | server_disable_edns_do |
 	server_log_destaddr | server_cookie_secret_file |
 	server_iter_scrub_ns | server_iter_scrub_cname | server_max_global_quota |
-	server_harden_unverified_glue | server_log_time_iso
+	server_harden_unverified_glue | server_log_time_iso | server_iter_scrub_promiscuous
 	;
 stub_clause: stubstart contents_stub
 	{
@@ -1151,6 +1154,15 @@ server_tls_use_sni: VAR_TLS_USE_SNI STRING_ARG
 		if(strcmp($2, "yes") != 0 && strcmp($2, "no") != 0)
 			yyerror("expected yes or no.");
 		else cfg_parser->cfg->tls_use_sni = (strcmp($2, "yes")==0);
+		free($2);
+	}
+	;
+server_tls_use_system_policy_versions: VAR_TLS_USE_SYSTEM_POLICY_VERSIONS STRING_ARG
+	{
+		OUTYY(("P(server_tls_use_system_policy_versions:%s)\n", $2));
+		if(strcmp($2, "yes") != 0 && strcmp($2, "no") != 0)
+			yyerror("expected yes or no.");
+		else cfg_parser->cfg->tls_use_system_policy_versions = (strcmp($2, "yes")==0);
 		free($2);
 	}
 	;
@@ -4237,6 +4249,16 @@ server_max_global_quota: VAR_MAX_GLOBAL_QUOTA STRING_ARG
 		if(atoi($2) == 0 && strcmp($2, "0") != 0)
 			yyerror("number expected");
 		else cfg_parser->cfg->max_global_quota = atoi($2);
+		free($2);
+	}
+	;
+server_iter_scrub_promiscuous: VAR_ITER_SCRUB_PROMISCUOUS STRING_ARG
+	{
+		OUTYY(("P(server_iter_scrub_promiscuous:%s)\n", $2));
+		if(strcmp($2, "yes") != 0 && strcmp($2, "no") != 0)
+			yyerror("expected yes or no.");
+		else cfg_parser->cfg->iter_scrub_promiscuous =
+			(strcmp($2, "yes")==0);
 		free($2);
 	}
 	;

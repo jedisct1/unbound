@@ -143,6 +143,12 @@ redis_connect(const char* host, int port, const char* path,
 {
 	struct timeval now_val;
 	redisContext* ctx;
+#ifdef THREADS_DISABLED
+	/* Fix attribute unused warning.
+	 * wait_lock is only used with lock_basic_* functions that are nop'ed
+	 * when compiled without thread support. */
+	(void)wait_lock;
+#endif /* THREADS_DISABLED */
 
 	/* See if the redis server is down, and reconnect has to wait. */
 	if(*reconnect_attempts > REDIS_RECONNECT_ATTEMPT_LIMIT) {
@@ -392,7 +398,7 @@ redis_init(struct module_env* env, struct cachedb_env* cachedb_env)
 set_with_ex_fail:
 	log_err("redis_init: failure during redis_init, the "
 		"redis-expire-records option requires the SET with EX command "
-		"(redis >= 2.6.2)");
+		"(redis >= 2.6.12)");
 	return 1;
 fail:
 	moddata_clean(&moddata);
@@ -508,7 +514,14 @@ redis_lookup(struct module_env* env, struct cachedb_env* cachedb_env,
 	char* key, struct sldns_buffer* result_buffer)
 {
 	redisReply* rep;
-	char cmdbuf[4+(CACHEDB_HASHSIZE/8)*2+1]; /* "GET " + key */
+	/* Supported commands:
+	 * - "GET " + key
+	 */
+#define REDIS_LOOKUP_MAX_BUF_LEN			\
+	4				/* "GET " */	\
+	+(CACHEDB_HASHSIZE/8)*2		/* key hash */	\
+	+ 1				/* \0 */
+	char cmdbuf[REDIS_LOOKUP_MAX_BUF_LEN];
 	int n;
 	int ret = 0;
 
@@ -568,7 +581,13 @@ redis_store(struct module_env* env, struct cachedb_env* cachedb_env,
 	 *   older redis 2.0.0 was "SETEX " + key + " " + ttl + " %b"
 	 * - "EXPIRE " + key + " 0"
 	 */
-	char cmdbuf[6+(CACHEDB_HASHSIZE/8)*2+11+3+1];
+#define REDIS_STORE_MAX_BUF_LEN				\
+	7			/* "EXPIRE " */		\
+	+(CACHEDB_HASHSIZE/8)*2	/* key hash */		\
+	+ 7			/* " %b EX " */		\
+	+ 20			/* ttl (uint64_t) */	\
+	+ 1			/* \0 */
+	char cmdbuf[REDIS_STORE_MAX_BUF_LEN];
 
 	if (!set_ttl) {
 		verbose(VERB_ALGO, "redis_store %s (%d bytes)", key, (int)data_len);
