@@ -1036,6 +1036,7 @@ mesh_state_create(struct module_env* env, struct query_info* qinfo,
 	mstate->s.no_cache_store = 0;
 	mstate->s.need_refetch = 0;
 	mstate->s.was_ratelimited = 0;
+	mstate->s.error_response_cache = 0;
 	mstate->s.qstarttime = *env->now;
 
 	/* init modules */
@@ -1075,6 +1076,14 @@ mesh_state_cleanup(struct mesh_state* mstate)
 	if(!mstate->replies_sent) {
 		struct mesh_reply* rep = mstate->reply_list;
 		struct mesh_cb* cb;
+		/* One http2 stream could bring down its comm_point along with
+		 * the other streams which could share the same query. Do all
+		 * the http2 stream bookkeeping upfront. */
+		for(; rep; rep=rep->next) {
+			if(rep->query_reply.c->use_h2)
+				http2_stream_remove_mesh_state(rep->h2_stream);
+		}
+		rep = mstate->reply_list;
 		/* in tcp_req_info, the mstates linked are removed, but
 		 * the reply_list is now NULL, so the remove-from-empty-list
 		 * takes no time and also it does not do the mesh accounting */
@@ -1082,8 +1091,6 @@ mesh_state_cleanup(struct mesh_state* mstate)
 		for(; rep; rep=rep->next) {
 			infra_wait_limit_dec(mesh->env->infra_cache,
 				&rep->query_reply, mesh->env->cfg);
-			if(rep->query_reply.c->use_h2)
-				http2_stream_remove_mesh_state(rep->h2_stream);
 			comm_point_drop_reply(&rep->query_reply);
 			log_assert(mesh->num_reply_addrs > 0);
 			mesh->num_reply_addrs--;
@@ -2370,6 +2377,10 @@ void mesh_state_remove_reply(struct mesh_area* mesh, struct mesh_state* m,
 			mesh->num_reply_addrs--;
 			infra_wait_limit_dec(mesh->env->infra_cache,
 				&n->query_reply, mesh->env->cfg);
+			/* We may be removing more than one http2 stream (they
+			 * share the same comm_point); make sure the streams
+			 * don't point back. */
+			if(n->h2_stream) n->h2_stream->mesh_state = NULL;
 
 			/* prev = prev; */
 			n = n->next;

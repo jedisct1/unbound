@@ -564,11 +564,26 @@
 /* Define if you have POSIX threads libraries and header files. */
 #undef HAVE_PTHREAD
 
+/* Define to 1 if you have the <pthread_np.h> header file. */
+#undef HAVE_PTHREAD_NP_H
+
 /* Have PTHREAD_PRIO_INHERIT. */
 #undef HAVE_PTHREAD_PRIO_INHERIT
 
 /* Define to 1 if the system has the type `pthread_rwlock_t'. */
 #undef HAVE_PTHREAD_RWLOCK_T
+
+/* Define if pthread_setname_np has the common 2 arguments. */
+#undef HAVE_PTHREAD_SETNAME_NP
+
+/* Define if pthread_setname_np has only 1 argument. */
+#undef HAVE_PTHREAD_SETNAME_NP1
+
+/* Define if pthread_setname_np has 3 arguments. */
+#undef HAVE_PTHREAD_SETNAME_NP3
+
+/* Define if pthread_setname_np exists as pthread_set_name_np instead. */
+#undef HAVE_PTHREAD_SET_NAME_NP
 
 /* Define to 1 if the system has the type `pthread_spinlock_t'. */
 #undef HAVE_PTHREAD_SPINLOCK_T
@@ -734,6 +749,12 @@
 
 /* Define to 1 if `sun_len' is a member of `struct sockaddr_un'. */
 #undef HAVE_STRUCT_SOCKADDR_UN_SUN_LEN
+
+/* Define to 1 if `st_mtimensec' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_MTIMENSEC
+
+/* Define to 1 if `st_mtim.tv_nsec' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC
 
 /* Define if you have Swig libraries and header files. */
 #undef HAVE_SWIG

@@ -1369,6 +1369,10 @@ decompress_rr_into_buffer(struct sldns_buffer* buf, uint8_t* pkt,
 				uncompressed_len = pkt_dname_len(&pktbuf);
 				if(!uncompressed_len)
 					return 0; /* parse error in dname */
+				compressed_len = sldns_buffer_position(
+					&pktbuf) - oldpos;
+				if(compressed_len > rdlen)
+					return 0; /* dname exceeds rdata */
 				if(!sldns_buffer_available(buf,
 					uncompressed_len))
 					/* dname too long for buffer */
@@ -1376,14 +1380,15 @@ decompress_rr_into_buffer(struct sldns_buffer* buf, uint8_t* pkt,
 				dname_pkt_copy(&pktbuf, 
 					sldns_buffer_current(buf), rd);
 				sldns_buffer_skip(buf, (ssize_t)uncompressed_len);
-				compressed_len = sldns_buffer_position(
-					&pktbuf) - oldpos;
 				rd += compressed_len;
 				rdlen -= compressed_len;
 				count--;
 				len = 0;
 				break;
 			case LDNS_RDF_TYPE_STR:
+				/* Check rdlen for resilience, because it is
+				 * checked above, that rdlen > 0 */
+				if(rdlen < 1) return 0; /* malformed */
 				len = rd[0] + 1;
 				break;
 			default:
@@ -1391,6 +1396,8 @@ decompress_rr_into_buffer(struct sldns_buffer* buf, uint8_t* pkt,
 				break;
 			}
 			if(len) {
+				if(len > rdlen)
+					return 0; /* malformed */
 				if(!sldns_buffer_available(buf, len))
 					return 0; /* too long for buffer */
 				sldns_buffer_write(buf, rd, len);
@@ -1998,12 +2005,21 @@ auth_zone_get_serial(struct auth_zone* z, uint32_t* serial)
 	struct auth_data* apex;
 	struct auth_rrset* soa;
 	struct packed_rrset_data* d;
+	size_t primlen, mboxlen;
 	apex = az_find_name(z, z->name, z->namelen);
 	if(!apex) return 0;
 	soa = az_domain_rrset(apex, LDNS_RR_TYPE_SOA);
 	if(!soa || soa->data->count==0)
 		return 0; /* no RRset or no RRs in rrset */
 	if(soa->data->rr_len[0] < 2+4*5) return 0; /* SOA too short */
+	if((primlen = dname_valid(soa->data->rr_data[0]+2,
+		soa->data->rr_len[0]-2)) == 0)
+		return 0; /* primary dname malformed */
+	if((mboxlen = dname_valid(soa->data->rr_data[0]+2+primlen,
+		soa->data->rr_len[0]-2-primlen)) == 0)
+		return 0; /* mailbox dname malformed */
+	if(2+primlen+mboxlen+4*5 != soa->data->rr_len[0])
+		return 0; /* rdata malformed */
 	d = soa->data;
 	*serial = sldns_read_uint32(d->rr_data[0]+(d->rr_len[0]-20));
 	return 1;
@@ -2016,12 +2032,21 @@ xfr_find_soa(struct auth_zone* z, struct auth_xfer* xfr)
 	struct auth_data* apex;
 	struct auth_rrset* soa;
 	struct packed_rrset_data* d;
+	size_t primlen, mboxlen;
 	apex = az_find_name(z, z->name, z->namelen);
 	if(!apex) return 0;
 	soa = az_domain_rrset(apex, LDNS_RR_TYPE_SOA);
 	if(!soa || soa->data->count==0)
 		return 0; /* no RRset or no RRs in rrset */
 	if(soa->data->rr_len[0] < 2+4*5) return 0; /* SOA too short */
+	if((primlen = dname_valid(soa->data->rr_data[0]+2,
+		soa->data->rr_len[0]-2)) == 0)
+		return 0; /* primary dname malformed */
+	if((mboxlen = dname_valid(soa->data->rr_data[0]+2+primlen,
+		soa->data->rr_len[0]-2-primlen)) == 0)
+		return 0; /* mailbox dname malformed */
+	if(2+primlen+mboxlen+4*5 != soa->data->rr_len[0])
+		return 0; /* rdata malformed */
 	/* SOA record ends with serial, refresh, retry, expiry, minimum,
 	 * as 4 byte fields */
 	d = soa->data;

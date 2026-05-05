@@ -11,15 +11,15 @@ sinclude(dnscrypt/dnscrypt.m4)
 
 # must be numbers. ac_defun because of later processing
 m4_define([VERSION_MAJOR],[1])
-m4_define([VERSION_MINOR],[24])
-m4_define([VERSION_MICRO],[3])
+m4_define([VERSION_MINOR],[25])
+m4_define([VERSION_MICRO],[1])
 AC_INIT([unbound],m4_defn([VERSION_MAJOR]).m4_defn([VERSION_MINOR]).m4_defn([VERSION_MICRO]),[unbound-bugs@nlnetlabs.nl or https://github.com/NLnetLabs/unbound/issues],[unbound])
 AC_SUBST(UNBOUND_VERSION_MAJOR, [VERSION_MAJOR])
 AC_SUBST(UNBOUND_VERSION_MINOR, [VERSION_MINOR])
 AC_SUBST(UNBOUND_VERSION_MICRO, [VERSION_MICRO])
 
 LIBUNBOUND_CURRENT=9
-LIBUNBOUND_REVISION=36
+LIBUNBOUND_REVISION=37
 LIBUNBOUND_AGE=1
 # 1.0.0 had 0:12:0
 # 1.0.1 had 0:13:0
@@ -122,7 +122,8 @@ LIBUNBOUND_AGE=1
 # 1.24.0 had 9:33:1
 # 1.24.1 had 9:34:1
 # 1.24.2 had 9:35:1
-# 1.24.3 had 9:36:1
+# 1.25.0 had 9:36:1
+# 1.25.1 had 9:37:1
 
 #   Current  -- the number of the binary API that we're implementing
 #   Revision -- which iteration of the implementation of the binary
@@ -729,6 +730,76 @@ int main(void) {return 0;}
 		fi # endif -pthread in CFLAGS
 
 		])
+fi
+
+if test x_$ub_have_pthreads != x_no; then
+	# Long checks to support pthread_setname_np().
+	# Some OSes have the extra non-portable functions in a specific
+	# header file.
+	AC_CHECK_HEADERS([pthread_np.h],,, [AC_INCLUDES_DEFAULT])
+	BAKCFLAGS="$CFLAGS"
+	CFLAGS="$CFLAGS -Werror"
+	# MacOS only has 1 argument, the name.
+	AC_MSG_CHECKING([whether pthread_setname_np has only 1 argument])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([AC_INCLUDES_DEFAULT
+#include <pthread.h>
+#ifdef HAVE_PTHREAD_NP_H
+#include <pthread_np.h>
+#endif
+	],[
+	    (void)pthread_setname_np("");
+	])],[
+	    AC_MSG_RESULT(yes)
+	    AC_DEFINE(HAVE_PTHREAD_SETNAME_NP1, 1, [Define if pthread_setname_np has only 1 argument.])
+	],[
+	    AC_MSG_RESULT(no)
+	])
+	# NetBSD has 3 arguments to allow for formatting of the name.
+	AC_MSG_CHECKING([whether pthread_setname_np has 3 arguments])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([AC_INCLUDES_DEFAULT
+#include <pthread.h>
+#ifdef HAVE_PTHREAD_NP_H
+#include <pthread_np.h>
+#endif
+	],[
+	    (void)pthread_setname_np(0, "", NULL);
+	])],[
+	    AC_MSG_RESULT(yes)
+	    AC_DEFINE(HAVE_PTHREAD_SETNAME_NP3, 1, [Define if pthread_setname_np has 3 arguments.])
+	],[
+	    AC_MSG_RESULT(no)
+	])
+	# Most OSes have the common 2 arguments, thread and name.
+	AC_MSG_CHECKING([whether pthread_setname_np has the common 2 arguments])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([AC_INCLUDES_DEFAULT
+#include <pthread.h>
+#ifdef HAVE_PTHREAD_NP_H
+#include <pthread_np.h>
+#endif
+	],[
+	    (void)pthread_setname_np(0, "");
+	])],[
+	    AC_MSG_RESULT(yes)
+	    AC_DEFINE(HAVE_PTHREAD_SETNAME_NP, 1, [Define if pthread_setname_np has the common 2 arguments.])
+	],[
+	    AC_MSG_RESULT(no)
+	])
+	# FreeBSD/OpenBSD use a slightly different function name.
+	AC_MSG_CHECKING([whether pthread_setname_np exists as pthread_set_name_np instead])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([AC_INCLUDES_DEFAULT
+#include <pthread.h>
+#ifdef HAVE_PTHREAD_NP_H
+#include <pthread_np.h>
+#endif
+	],[
+	    (void)pthread_set_name_np(0, "");
+	])],[
+	    AC_MSG_RESULT(yes)
+	    AC_DEFINE(HAVE_PTHREAD_SET_NAME_NP, 1, [Define if pthread_setname_np exists as pthread_set_name_np instead.])
+	],[
+	    AC_MSG_RESULT(no)
+	])
+	CFLAGS="$BAKCFLAGS"
 fi
 
 # check solaris thread library
@@ -1769,6 +1840,7 @@ if test $ac_cv_func_daemon = yes; then
 ])
 fi
 
+AC_CHECK_MEMBERS([struct stat.st_mtimensec, struct stat.st_mtim.tv_nsec])
 AC_CHECK_MEMBERS([struct sockaddr_un.sun_len],,,[
 AC_INCLUDES_DEFAULT
 #ifdef HAVE_SYS_UN_H

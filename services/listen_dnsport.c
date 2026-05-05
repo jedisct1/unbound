@@ -2300,21 +2300,8 @@ int
 tcp_req_info_handle_read_close(struct tcp_req_info* req)
 {
 	verbose(VERB_ALGO, "tcp channel read side closed %d", req->cp->fd);
-	/* reset byte count for (potential) partial read */
-	req->cp->tcp_byte_count = 0;
-	/* if we still have results to write, pick up next and write it */
-	if(req->num_done_req != 0) {
-		tcp_req_pickup_next_result(req);
-		tcp_req_info_setup_listen(req);
-		return 1;
-	}
-	/* if nothing to do, this closes the connection */
-	if(req->num_open_req == 0 && req->num_done_req == 0)
-		return 0;
-	/* otherwise, we must be waiting for dns resolve, wait with timeout */
-	req->read_is_closed = 1;
-	tcp_req_info_setup_listen(req);
-	return 1;
+	/* RFC 7766 6.2.4 says to drop pending replies when client closes. */
+	return 0; /* drop connection */
 }
 
 void
@@ -3780,7 +3767,7 @@ doq_repinfo_retrieve_localaddr(struct comm_reply* repinfo,
 		memset(sa6, 0, *localaddrlen);
 		sa6->sin6_family = AF_INET6;
 		memmove(&sa6->sin6_addr, &repinfo->pktinfo.v6info.ipi6_addr,
-			*localaddrlen);
+			sizeof(struct in6_addr));
 		sa6->sin6_port = repinfo->doq_srcport;
 #endif
 	} else {
@@ -3790,7 +3777,7 @@ doq_repinfo_retrieve_localaddr(struct comm_reply* repinfo,
 		memset(sa, 0, *localaddrlen);
 		sa->sin_family = AF_INET;
 		memmove(&sa->sin_addr, &repinfo->pktinfo.v4info.ipi_addr,
-			*localaddrlen);
+			sizeof(struct in_addr));
 		sa->sin_port = repinfo->doq_srcport;
 #elif defined(IP_RECVDSTADDR)
 		struct sockaddr_in* sa = (struct sockaddr_in*)localaddr;
