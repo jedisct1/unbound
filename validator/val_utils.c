@@ -1066,10 +1066,10 @@ val_fill_reply(struct reply_info* chase, struct reply_info* orig,
 			if(query_dname_compare(name, 
 				orig->rrsets[i]->rk.dname) == 0)
 			    chase->rrsets[chase->an_numrrsets
-				+orig->ns_numrrsets+chase->ar_numrrsets++] 
+				+chase->ns_numrrsets+chase->ar_numrrsets++]
 				= orig->rrsets[i];
 		} else if(rrset_has_signer(orig->rrsets[i], name, len)) {
-			chase->rrsets[chase->an_numrrsets+orig->ns_numrrsets+
+			chase->rrsets[chase->an_numrrsets+chase->ns_numrrsets+
 				chase->ar_numrrsets++] = orig->rrsets[i];
 		}
 	}
@@ -1310,10 +1310,11 @@ val_find_DS(struct module_env* env, uint8_t* nm, size_t nmlen, uint16_t c,
 		/* DS rrset exists. Return it to the validator immediately*/
 		struct ub_packed_rrset_key* copy = packed_rrset_copy_region(
 			rrset, region, *env->now);
-		struct packed_rrset_data* d = copy->entry.data;
+		struct packed_rrset_data* d;
 		lock_rw_unlock(&rrset->entry.lock);
 		if(!copy)
 			return NULL;
+		d = (struct packed_rrset_data*)copy->entry.data;
 		msg = dns_msg_create(nm, nmlen, LDNS_RR_TYPE_DS, c, region, 1);
 		if(!msg)
 			return NULL;

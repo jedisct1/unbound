@@ -149,6 +149,16 @@ need_to_update_rrset(void* nd, void* cd, time_t timenow, int equal, int ns)
 		if(equal && !TTL_IS_EXPIRED(cached->ttl, timenow) &&
 			cached->security == sec_status_bogus)
 			return 0;
+		/* ghost-domain: never let an NS overwrite extend lifetime
+		 * past the entry it replaces, regardless of trust. */
+		if(ns && !TTL_IS_EXPIRED(cached->ttl, timenow) &&
+			newd->ttl > cached->ttl) {
+			size_t i;
+			newd->ttl = cached->ttl;
+			for(i=0; i<(newd->count+newd->rrsig_count); i++)
+				if(newd->rr_ttl[i] > newd->ttl)
+					newd->rr_ttl[i] = newd->ttl;
+		}
                 return 1;
 	}
 	/*	o item in cache has expired */
@@ -251,6 +261,8 @@ void rrset_cache_update_wildcard(struct rrset_cache* rrset_cache,
 {
 	struct rrset_ref ref;
 	uint8_t wc_dname[LDNS_MAX_DOMAINLEN+3];
+	uint8_t* new_dname;
+	size_t new_dname_len;
 	rrset = packed_rrset_copy_alloc(rrset, alloc, timenow);
 	if(!rrset) {
 		log_err("malloc failure in rrset_cache_update_wildcard");
@@ -262,14 +274,16 @@ void rrset_cache_update_wildcard(struct rrset_cache* rrset_cache,
 	wc_dname[1] = (uint8_t)'*';
 	memmove(wc_dname+2, ce, ce_len);
 
-	free(rrset->rk.dname);
-	rrset->rk.dname_len = ce_len + 2;
-	rrset->rk.dname = (uint8_t*)memdup(wc_dname, rrset->rk.dname_len);
-	if(!rrset->rk.dname) {
-		alloc_special_release(alloc, rrset);
+	new_dname_len = ce_len + 2;
+	new_dname = (uint8_t*)memdup(wc_dname, new_dname_len);
+	if(!new_dname) {
+		ub_packed_rrset_parsedelete(rrset, alloc);
 		log_err("memdup failure in rrset_cache_update_wildcard");
 		return;
 	}
+	free(rrset->rk.dname);
+	rrset->rk.dname = new_dname;
+	rrset->rk.dname_len = new_dname_len;
 
 	rrset->entry.hash = rrset_key_hash(&rrset->rk);
 	ref.key = rrset;

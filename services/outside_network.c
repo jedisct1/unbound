@@ -1707,6 +1707,12 @@ static int setup_if(struct port_if* pif, const char* addrstr,
 	   !netblockstrtoaddr(addrstr, UNBOUND_DNS_PORT,
 			      &pif->addr, &pif->addrlen, &pif->pfxlen))
 		return 0;
+#ifdef INT_MAX
+	if(numfd > (size_t)INT_MAX) {
+		log_err("num_ports exceeds INT_MAX");
+		return 0;
+	}
+#endif
 	pif->maxout = (int)numfd;
 	pif->inuse = 0;
 	pif->out = (struct port_comm**)calloc(numfd, 
@@ -1775,6 +1781,13 @@ outside_network_create(struct comm_base *base, size_t bufsize,
 		outside_network_delete(outnet);
 		return NULL;
 	}
+#ifdef INT_MAX
+	if(num_ports > (size_t)INT_MAX) {
+		log_err("outgoing num_ports exceeds INT_MAX");
+		outside_network_delete(outnet);
+		return NULL;
+	}
+#endif
 #ifndef INET6
 	do_ip6 = 0;
 #endif
@@ -3347,9 +3360,9 @@ serviced_udp_callback(struct comm_point* c, void* arg, int error,
 	if(error == NETEVENT_TIMEOUT) {
 		if(sq->status == serviced_query_UDP_EDNS && sq->last_rtt < 5000 &&
 		   (serviced_query_udp_size(sq, serviced_query_UDP_EDNS_FRAG) < serviced_query_udp_size(sq, serviced_query_UDP_EDNS))) {
-			/* fallback to 1480/1280 */
+			/* fallback to 1472/1232 */
 			sq->status = serviced_query_UDP_EDNS_FRAG;
-			log_name_addr(VERB_ALGO, "try edns1xx0", sq->qbuf+10,
+			log_name_addr(VERB_ALGO, "try edns1xx2", sq->qbuf+10,
 				&sq->addr, sq->addrlen);
 			if(!serviced_udp_send(sq, c->buffer)) {
 				serviced_callbacks(sq, NETEVENT_CLOSED, c, rep);

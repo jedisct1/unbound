@@ -1,3 +1,86 @@
+20 May 2026: Wouter
+	- Fix CVE-2026-33278, Possible remote code execution during DNSSEC
+	  validation. Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix CVE-2026-42944, Heap overflow and crash with multiple nsid,
+	  cookie, padding EDNS options. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix CVE-2026-42959, Crash during DNSSEC validation of malicious
+	  content. Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix CVE-2026-32792, Packet of death with DNSCrypt. Thanks to Andrew
+	  Griffiths from 'calif.io' for the report.
+	- Fix CVE-2026-40622, "Ghost domain name" variant. Thanks to Qifan
+	  Zhang, Palo Alto Networks, for the report.
+	- Fix CVE-2026-41292, Parsing a long list of incoming EDNS options
+	  degrades performance. Thanks to GitHub user 'N0zoM1z0', also Qifan
+	  Zhang from Palo Alto Networks, for the report.
+	- Fix CVE-2026-42534, Jostle logic bypass degrades resolution
+	  performance. Thanks to Qifan Zhang, Palo Alto Networks, for the
+	  report.
+	- Fix CVE-2026-42923, Degradation of service with unbounded NSEC3
+	  hash calculations. Thanks to Qifan Zhang, Palo Alto Networks, for
+	  the report.
+	- Fix CVE-2026-42960, Possible cache poisoning attack while following
+	  delegation. Thanks to TaoFei Guo from Peking University, Yang Luo
+	  and JianJun Chen, Tsinghua University, for the report.
+	- Fix CVE-2026-44390, Unbounded name compression in certain cases
+	  causes degradation of service. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix CVE-2026-44608, Use after free and crash in RPZ code. Thanks
+	  to Qifan Zhang, Palo Alto Networks, for the report.
+	- Tag for 1.25.1 release, it contains the security fixes on 1.25.0.
+	  the code repository continues with in addition the previous fixes,
+	  for 1.25.2.
+	- Unit test for CVE-2026-33278.
+	- Unit test for CVE-2026-42944.
+	- Unit test for CVE-2026-42959.
+	- Unit test for CVE-2026-40622.
+	- Unit test for CVE-2026-42960.
+
+18 May 2026: Wouter
+	- Fix for mixed class referrals, the resolver uses the query
+	  class. Thanks to Xin Wang and Jiajia Liu, Northwestern
+	  Polytechnical University, for the report.
+
+15 May 2026: Wouter
+	- Fix man page entry for so-sndbuf, it is for responses sent out.
+	- Fix val_find_DS for robustness, to check the result of
+	  packet_rrset_copy_region before using it. Thanks to Xin Wang
+	  and Jiajia Liu, Northwestern Polytechnical University, for
+	  the report.
+	- Fix that for dns64 answers, the AAAA query is checked to be
+	  DNSSEC validated, when DNSSEC is enabled. This improves
+	  the RFC6147 conformance of Unbound. Thanks to Xin Wang
+	  and Jiajia Liu, Northwestern Polytechnical University, for
+	  the report. In addition, thanks to Qifan Zhang, Palo Alto
+	  Networks, for reporting it.
+	- Fix for allocation-failure hardening of rrset cache wildcard
+	  storage and canonical NSEC owner replacement. Thanks to Xin
+	  Wang and Jiajia Liu, Northwestern Polytechnical University,
+	  for the report.
+	- Fix DNSSEC validation with libnettle for noncanonical RSA
+	  DNSKEYs with leading zeroes for n. Thanks to Xin Wang and
+	  Jiajia Liu, Northwestern Polytechnical University, for
+	  the report.
+	- Fix DNSKEY size calculation for noncanonical RSA DNSKEYs
+	  with leading zeroes for n. Thanks to Xin Wang and Jiajia Liu,
+	  Northwestern Polytechnical University, for the report.
+
+11 May 2026: Yorgos
+	- Fix comment and verbose logging for EDNS fallback buffer size.
+
+8 May 2026: Wouter
+	- Fix to relax assertions after the TTL 0 handling change.
+	  This relaxes an assertion in cachedb (it fails instead),
+	  and for packet_rrset_copy_region.
+
+7 May 2026: Wouter
+	- Fix for Heap Out-of-Bounds Write via size_t-to-int Truncation
+	  in setup_if() - outside_network_create(). This fixes that
+	  large values for num_ports do not overflow and create
+	  invalid references after integer truncation. Thanks
+	  to Karnakar Reddy (@karnakarreddi) for the report.
+	- Fix to clean up log ids after a failure to start a worker thread.
+
 1 May 2026: Wouter
 	- iana portlist updated.
 
