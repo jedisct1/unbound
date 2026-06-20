@@ -386,8 +386,6 @@ new_local_rrset(struct regional* region, struct local_data* node,
 		log_err("out of memory");
 		return NULL;
 	}
-	rrset->next = node->rrsets;
-	node->rrsets = rrset;
 	rrset->rrset = (struct ub_packed_rrset_key*)
 		regional_alloc_zero(region, sizeof(*rrset->rrset));
 	if(!rrset->rrset) {
@@ -408,6 +406,8 @@ new_local_rrset(struct regional* region, struct local_data* node,
 	rrset->rrset->rk.dname_len = node->namelen;
 	rrset->rrset->rk.type = htons(rrtype);
 	rrset->rrset->rk.rrset_class = htons(rrclass);
+	rrset->next = node->rrsets;
+	node->rrsets = rrset;
 	return rrset;
 }
 
@@ -431,6 +431,10 @@ rrset_insert_rr(struct regional* region, struct packed_rrset_data* pd,
 	pd->rr_ttl = regional_alloc(region, sizeof(*pd->rr_ttl)*pd->count);
 	pd->rr_data = regional_alloc(region, sizeof(*pd->rr_data)*pd->count);
 	if(!pd->rr_len || !pd->rr_ttl || !pd->rr_data) {
+		pd->count--;
+		pd->rr_len = oldlen;
+		pd->rr_ttl = oldttl;
+		pd->rr_data = olddata;
 		log_err("out of memory");
 		return 0;
 	}
@@ -446,6 +450,10 @@ rrset_insert_rr(struct regional* region, struct packed_rrset_data* pd,
 	pd->rr_ttl[0] = ttl;
 	pd->rr_data[0] = regional_alloc_init(region, rdata, rdata_len);
 	if(!pd->rr_data[0]) {
+		pd->count--;
+		pd->rr_len = oldlen;
+		pd->rr_ttl = oldttl;
+		pd->rr_data = olddata;
 		log_err("out of memory");
 		return 0;
 	}
@@ -671,7 +679,9 @@ lz_enter_rr_str(struct local_zones* zones, const char* rr)
 	z = local_zones_lookup(zones, rr_name, len, labs, rr_class, rr_type, 1);
 	if(!z) {
 		lock_rw_unlock(&zones->lock);
-		fatal_exit("internal error: no zone for rr %s", rr);
+		log_err("internal error: no zone for rr %s", rr);
+		free(rr_name);
+		return 0;
 	}
 	lock_rw_wrlock(&z->lock);
 	lock_rw_unlock(&zones->lock);
@@ -1500,8 +1510,10 @@ find_tag_datas(struct query_info* qinfo, struct config_strlist* list,
 			return 0; /* out of memory */
 		qinfo->local_alias->rrset =
 			regional_alloc_init(temp, r, sizeof(*r));
-		if(!qinfo->local_alias->rrset)
+		if(!qinfo->local_alias->rrset) {
+			qinfo->local_alias = NULL;
 			return 0; /* out of memory */
+		}
 	}
 	return result;
 }
@@ -1567,13 +1579,17 @@ local_data_answer(struct local_zone* z, struct module_env* env,
 			return 0; /* out of memory */
 		qinfo->local_alias->rrset = regional_alloc_init(
 			temp, lr->rrset, sizeof(*lr->rrset));
-		if(!qinfo->local_alias->rrset)
+		if(!qinfo->local_alias->rrset) {
+			qinfo->local_alias = NULL;
 			return 0; /* out of memory */
+		}
 		qinfo->local_alias->rrset->rk.dname = qinfo->qname;
 		qinfo->local_alias->rrset->rk.dname_len = qinfo->qname_len;
 		get_cname_target(lr->rrset, &ctarget, &ctargetlen);
-		if(!ctargetlen)
+		if(!ctargetlen) {
+			qinfo->local_alias = NULL;
 			return 0; /* invalid cname */
+		}
 		if(dname_is_wild(ctarget)) {
 			/* synthesize cname target */
 			struct packed_rrset_data* d, *lr_d;
@@ -1602,8 +1618,10 @@ local_data_answer(struct local_zone* z, struct module_env* env,
 				sizeof(struct packed_rrset_data) + sizeof(size_t) +
 				sizeof(uint8_t*) + sizeof(time_t) + sizeof(uint16_t)
 				+ newtargetlen);
-			if(!d)
+			if(!d) {
+				qinfo->local_alias = NULL;
 				return 0; /* out of memory */
+			}
 			lr_d = (struct packed_rrset_data*)lr->rrset->entry.data;
 			qinfo->local_alias->rrset->entry.data = d;
 			d->ttl = lr_d->rr_ttl[0]; /* RFC6672-like behavior:

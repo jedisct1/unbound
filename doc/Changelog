@@ -1,3 +1,316 @@
+19 June 2026: Wouter
+	- Fix for #1457: fix thread setname for thread start of
+	  dnstap, and fast_reload.
+	- Fix to update github ci actions/checkout to v7.
+	- Fix warning about file_string_matches in unbound-checkconf.
+
+17 June 2026: Wouter
+	- Fix that after fast_reload the disown of the auth zone
+	  transfer task cleans the chunk list. Also fix the
+	  auth_transfer_limit test to use a forwarder for each type
+	  of failure, so the one is not blocked by the other waiting.
+	- Fix to remove debug from auth_transfer_limit test.
+	- Fix that unbound-checkconf checks if an auth-zone download
+	  can overwrite another file, by filename collision.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that malloc failure in auth-zone insert rr does
+	  not create an empty node and does not cause an infinite
+	  loop. Thanks to Qifan Zhang, Palo Alto Networks, for
+	  the report.
+	- Fix that unbound-control auth_zone_reload stops the
+	  server answering from the zone after a failure to read.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that malloc failure in dns64_inform_super does
+	  not set up a half-built reply for cache store, that could
+	  lead to a crash. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix that malloc failure for new_local_rrset for RPZ qname
+	  trigger RR insert does not crash. It does not link a
+	  partial RRset, and logs an error on failure, and cleans
+	  up the dname allocation. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix that malloc failure in doq connection setup, does
+	  not crash in doq connection delete later. Thanks to Qifan
+	  Zhang, Palo Alto Networks, for the report.
+	- Fix that malloc failure for ngtcp2_conn_server_new
+	  cleans up reference that older ngtcp2 versions can leave.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that on malloc failure during accept of TCP, the
+	  socket is not left to cause a read event loop. It uses
+	  slow-accept to delay accepting new connections, if
+	  that fails it drops the new connections. When the tcp
+	  connection usage is full, it waits for 50msec, to allow
+	  existing queries to be resolved. Thanks to Qifan Zhang,
+	  Palo Alto Networks, for the report.
+	- Fix that malloc failure for rpz_strip_nsdname is
+	  checked and handled, so that it does not crash later.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that malloc failure during edns subnet addrtree
+	  insert is checked, so it does not crash later. Thanks to
+	  Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix to check the return value of auth_xfer_create
+	  during fast_reload auth-zone add and change processing.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix to check for malloc failure in rpz response create,
+	  for nodata and nxdomain, so it does not crash later.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that fast_reload does not terminate the server
+	  on malloc failure for dnstap, or if gethostname fails.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix after malloc failure for stats, then it drains the pipe
+	  so the internal messaging stays correct. Also it does
+	  not exit the server if stats pipe communication fails.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that fast_reload does not terminate the server
+	  on config read failure after malloc failure. Thanks to
+	  Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that fast_reload does not terminate the server if
+	  random init for DNS cookies fails. The data is only random
+	  generated if cookies are enabled, and the random data
+	  is necessary. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+
+17 June 2026: Yorgos
+	- Fix memory leak on DNAME 0TTL records.
+
+16 June 2026: Wouter
+	- Fix to disallow $INCLUDE for secondary zones. Start up
+	  of server continues if a secondary zone fails to load.
+	  Failed loads clear the zone data, so there is no partial
+	  zone. Thanks to Qifan Zhang, Palo Alto Networks, for
+	  the report.
+	- Fix that when SVCB records cannot be written out, and
+	  are written in unknown format, that the zone read allows
+	  such unknown format SVCB records. Thanks to Qifan Zhang,
+	  Palo Alto Networks, for the report.
+	- Fix that a half-written trust anchor file does not crash
+	  the server at runtime. It unlinks a wrong file from the list.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that auth-zone, and RPZ zones, do not allow out-of-zone
+	  records. These are records that are not under the zone apex.
+	  The out-of-zone records are dropped from the zone contents.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that dns64 does not ignore the `forward-no-cache` and
+	  `stub-no-cache` options. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix that a signed wildcard NSEC, is checked before use,
+	  so it does not allow insecure DS proofs inappropriately.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that after malloc failure a half-built local_alias does
+	  not crash the server. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix that for a zonefile only zone, if that file does not
+	  exist on server start, the server continues to start with
+	  a warning log message. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix that after malloc failure in RPZ load a half built
+	  list does not crash later. The newly created RRset is
+	  linked after creation has succeeded. Thanks to Qifan Zhang,
+	  Palo Alto Networks, for the report.
+	- Fix that dnscrypt configuration does not crash, due to
+	  inconsistency between secret and public keys. Also
+	  duplicate files are skipped. Thanks to Qifan Zhang, Palo
+	  Alto Networks, for the report.
+	- Fix locking in libunbound ub_ctx_set_event call.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that libunbound pipe functions fail with error after
+	  an event base is set. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix for neater solution to clear log thread id after
+	  worker init failure. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix incorrect cleanup after an allocation failure for
+	  a delegation point. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix that after malloc failure in find_tag_datas, the
+	  local_alias is cleaned up. Thanks to Qifan Zhang, Palo
+	  Alto Networks, for the report.
+	- Fix that after shared memory cannot be created, from
+	  `shm-enable`, the server does not crash. Thanks to Qifan
+	  Zhang, Palo Alto Networks, for the report.
+	- Fix incorrect cleanup after an allocation failure for
+	  a delegation point in a region. Thanks to Qifan Zhang,
+	  Palo Alto Networks, for the report.
+	- Fix after malloc failure the rrset_insert_rr in
+	  localzone processing, during RPZ qname trigger processing,
+	  the RRset retains its previous data correcly. Thanks to
+	  Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix for #1462: Fix that auth primary host name lookup
+	  allows CNAMEs.
+
+15 June 2026: Wouter
+	- Fix to add `max-transfer-size` and `max-transfer-time` that
+	  limit auth-zone and rpz transfer amount and time taken.
+	  Default is disabled. This hardens against unbounded
+	  transfers. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix perform a full transfer every number of incremental
+	  transfers, to stop increasing memory usage, for rpz
+	  zones. Thanks to Qifan Zhang, Palo Alto Networks, for
+	  the report.
+	- Fix assertion failure for long HTTP header that fills
+	  buffer. Thanks to Qifan Zhang, Palo Alto Networks, for
+	  the report.
+	- Fix buffer overflow when configured with lower than
+	  default size and http transfer. Thanks to Qifan Zhang,
+	  Palo Alto Networks, for the report.
+	- Fix that misconfigured `iter-scrub-ns: 0` causes request
+	  failures. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix that fast_reload when a zonemd verification lookup
+	  it in progress with subnet loaded, deregisters the
+	  callback. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix for fast_reload that removes an auth zone while its
+	  lookups are in progress, for a primary name. Also after the
+	  change, it no longer picks up the old results. Thanks to
+	  Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix integer overflow in infra-cache-max-rtt calculation.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix erroneous DNS error report values after bogus AAAA
+	  query caused error information that was not cleared by
+	  a successful A subquery. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix integer overflow for very high values of
+	  `sock-queue-timeout`. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix that fast_reload does not terminate the server for
+	  errors in config, for key files. Thanks to Qifan Zhang,
+	  Palo Alto Networks, for the report.
+	- Fix log of an aliased qname, to not use freed region
+	  memory. Thanks to Qifan Zhang, Palo Alto Networks, for
+	  the report.
+	- Fix DNAME synthesis from cache that keeps use of 0TTL
+	  entries in a sliding window. It did not surpass RRSIG
+	  expiry. Thanks to Qifan Zhang, Palo Alto Networks, for
+	  the report.
+	- Fix misconfigured ipsecmod hook causing path name
+	  similarity with other file. The ipsecmod is changed for
+	  exec of the hook. The ipsecmod hook, if a script, has to
+	  start now with a line like `#!/bin/sh`. Thanks to Qifan
+	  Zhang, Palo Alto Networks, for the report.
+	- Fix that dns64 bypasses rpz-passthru rule during
+	  synthesis. This restricted more than necessary. Thanks to
+	  Qifan Zhang, Palo Alto Networks, for the report.
+
+12 June 2026: Wouter
+	- Fix that for auth-zone and rpz zones the allow-notify
+	  addresses and netblocks are available from start, and
+	  fix the probe step skip.
+
+11 June 2026: Wouter
+	- Fix for #1306: configure detects specifically the call to
+	  SSL_set_quic_tls_early_data_enabled and
+	  SSL_set_quic_early_data_enabled, so the correct one is used.
+	- Fix for #1306: configure checks if the ngtcp2_crypto_ossl
+	  header file is available, and prints an error otherwise.
+	- Fix #1437: Fix compile with OpenSSL 4.0.1.
+	- Fix compile for OpenSSL 1.0.2 and before in server cleanup.
+
+10 June 2026: Wouter
+	- Fix pythonmod script read for numeric overflow.
+	- Fix warnings with gcc in compat/inet_pton.c.
+
+9 June 2026: Wouter
+	- Fix unit test for ecs to check for malloc success.
+
+3 June 2026: Wouter
+	- Fix that the processing of class responses does not have
+	  a heap use-after-free. That could happen if at least two
+	  distinct classes are configured for resolution. Thanks
+	  to Qifan Zhang, Palo Alto Networks for the report.
+	  In addition, thanks to Xin Wang, Jiapeng Li, and Jiajia
+	  Liu, Northwestern Polytechnical University, for also
+	  reporting this.
+	- Fix negative cache to work with NSEC3 records without salt.
+	  Thanks to Xin Wang, Jiapeng Li, and Jiajia Liu, Northwestern
+	  Polytechnical University, for the report.
+	- Fix parse of svcbparam ech, it had incorrect length. Thanks
+	  to Qifan Zhang, Palo Alto Networks for the report.
+	- Fix that quotation and escaping works the same in auth-zone
+	  url content, as in the zonefile read. Thanks to Qifan Zhang,
+	  Palo Alto Networks for the report.
+	- Fix ipset module to use larger domain name buffers, and
+	  check buffer lengths. Thanks to Qifan Zhang, Palo Alto
+	  Networks for the report.
+	- Fix PROXYv2 header read and consume, it checks the header
+	  size. Thanks to Qifan Zhang, Palo Alto Networks for
+	  the report.
+	- Fix negative cache NSEC3 nodata proof, to use the correct
+	  message size. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix fast_reload for when a ZONEMD lookup is in progress.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that validation canonicalization of domain names
+	  in rdata checks for buffer bounds. Thanks to Qifan Zhang,
+	  Palo Alto Networks, for the report.
+	- Fix that dump_cache has a larger buffer for records,
+	  and it checks that an owner name does not collide with BADRR
+	  on the input, and changes verbosity on the log of failure in
+	  rrset to string.  Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix that dns64 cleans up the allocated message if the adjust
+	  routines fail, and checks if there is a reply before cache
+	  store, also unbound checks if A and AAAA are malformed
+	  for auth-zones. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+
+3 June 2026: Yorgos
+	- Fix const as reported by newest compiler warnings.
+
+29 May 2026: Wouter
+	- Fix header_seen detection for trust anchor files, so that it
+	  detects the id line.
+	- iana portlist updated.
+	- Update icannbundle.pem certificates in unbound-anchor. It
+	  has the public keys for 2009 to 2029 and for 2025 to 2045.
+	- Fix unit test to check for new icannbundle.pem.
+
+28 May 2026: Wouter
+	- Fix #1457: race condition causes segfault when starting
+	  threads.
+
+27 May 2026: Wouter
+	- Fix for autotrust state-file line overflow, that can give
+	  hold-down bypass. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix to limit the DSNS per-label walk in the iterator. Thanks
+	  to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that the ratelimit is decremented on successful
+	  referrals. Thanks to Qifan Zhang, Palo Alto Networks, for
+	  the report.
+	- Fix that msgencode insert_query has the correct assertion,
+	  for a local_alias. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix to reset the tcp-timeout before applying a load based
+	  reduction. Thanks to Qifan Zhang, Palo Alto Networks, for the
+	  report.
+	- Fix to decrement the per-netblock tcp connection limits, so
+	  it keeps usable. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix manual to document ratelimit, that it is for target
+	  nameservers for a domain, and keeps queries limited. Thanks
+	  to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix, in depth, for respip rewrite of dns64 responses. Thanks
+	  to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that dns64 with subnetcache does not write ECS scoped
+	  answers to global cache. Thanks to Qifan Zhang, Palo Alto
+	  Networks, for the report.
+	- Fix ipset module for name too long checks, race conditions
+	  on local name buffer, and for socket close race condition.
+	  Thanks to Qifan Zhang, Palo Alto Networks, for the report.
+	- Fix that validator caps number of ANY RRsets it can
+	  validate, and the wait timer is shortened. Thanks to Qifan
+	  Zhang, Palo Alto Networks, for the report.
+	- Fix analyzer warning in mesh_new_client.
+
+26 May 2026: Wouter
+	- Fix for mesh new client and mesh new callback to rollback the
+	  added address, tcp mesh state and callback when there is a failure
+	  to initialize. This fixes the mesh accounting of reply addresses.
+	  Thanks to Xin Wang, Jiapeng Li, and Jiajia Liu, Northwestern
+	  Polytechnical University, for the report
+
 20 May 2026: Wouter
 	- Fix CVE-2026-33278, Possible remote code execution during DNSSEC
 	  validation. Thanks to Qifan Zhang, Palo Alto Networks, for the report.
@@ -35,6 +348,18 @@
 	- Unit test for CVE-2026-42959.
 	- Unit test for CVE-2026-40622.
 	- Unit test for CVE-2026-42960.
+	- Fix in depth for serve-expired responses from cachedb, that it
+	  does not store bogus. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix lame server detection, for selfpointed glue records.
+	  Thanks to Shuhan Zhang, Dan Li, and Baojun Liu from Tsinghua
+	  University for the report.
+	- Fix cleaning up DoH session. The same query can be on multiple
+	  streams in a session. Thanks to Qifan Zhang, Palo Alto Networks,
+	  for the report.
+	- Fix for signed same-owner CNAME and ordinary RRset responses.
+	  Thanks to Xin Wang and Jiajia Liu, Northwestern Polytechnical
+	  University, for the report.
 
 18 May 2026: Wouter
 	- Fix for mixed class referrals, the resolver uses the query

@@ -3511,7 +3511,8 @@ outnet_serviced_query(struct outside_network* outnet,
 	char* tls_auth_name, struct sockaddr_storage* addr, socklen_t addrlen,
 	uint8_t* zone, size_t zonelen, struct module_qstate* qstate,
 	comm_point_callback_type* callback, void* callback_arg,
-	sldns_buffer* buff, struct module_env* env, int* was_ratelimited)
+	sldns_buffer* buff, struct module_env* env, int* was_ratelimited,
+	int* ratelimit_incremented)
 {
 	struct serviced_query* sq;
 	struct service_callback* cb;
@@ -3583,6 +3584,7 @@ outnet_serviced_query(struct outside_network* outnet,
 					"delegation point", zone,
 					LDNS_RR_TYPE_NS, LDNS_RR_CLASS_IN);
 			}
+			*ratelimit_incremented = 1;
 		}
 		/* make new serviced query entry */
 		sq = serviced_create(outnet, buff, dnssec, want_dnssec, nocaps,
@@ -3775,7 +3777,33 @@ setup_comm_ssl(struct comm_point* cp, struct outside_network* outnet,
 		(void)SSL_set_tlsext_host_name(cp->ssl, host);
 	}
 #endif
-#ifdef HAVE_SSL_SET1_HOST
+#ifdef HAVE_SSL_SET1_DNSNAME
+	if((SSL_CTX_get_verify_mode(outnet->sslctx)&SSL_VERIFY_PEER)) {
+		/* because we set SSL_VERIFY_PEER, in netevent in
+		 * ssl_handshake, it'll check if the certificate
+		 * verification has succeeded */
+		/* SSL_VERIFY_PEER is set on the sslctx */
+		/* and the certificates to verify with are loaded into
+		 * it with SSL_load_verify_locations or
+		 * SSL_CTX_set_default_verify_paths */
+		/* setting the hostname makes openssl verify the
+		 * host name in the x509 certificate in the
+		 * SSL connection*/
+		struct sockaddr_storage tmpaddr;
+		socklen_t tmpaddrlen = (socklen_t)sizeof(tmpaddr);
+		if(ipstrtoaddr(host, UNBOUND_DNS_PORT, &tmpaddr, &tmpaddrlen)) {
+			if(!SSL_set1_ipaddr(cp->ssl, host)) {
+				log_err("SSL_set1_ipaddr failed");
+				return 0;
+			}
+		} else {
+			if(!SSL_set1_dnsname(cp->ssl, host)) {
+				log_err("SSL_set1_dnsname failed");
+				return 0;
+			}
+		}
+	}
+#elif defined(HAVE_SSL_SET1_HOST)
 	if((SSL_CTX_get_verify_mode(outnet->sslctx)&SSL_VERIFY_PEER)) {
 		/* because we set SSL_VERIFY_PEER, in netevent in
 		 * ssl_handshake, it'll check if the certificate
@@ -3904,7 +3932,8 @@ outnet_comm_point_for_http(struct outside_network* outnet,
 		/* outnet_tcp_connect has closed fd on error for us */
 		return 0;
 	}
-	cp = comm_point_create_http_out(outnet->base, 65552, cb, cb_arg,
+	cp = comm_point_create_http_out(outnet->base,
+		sldns_buffer_capacity(outnet->udp_buff), cb, cb_arg,
 		outnet->udp_buff);
 	if(!cp) {
 		log_err("malloc failure");

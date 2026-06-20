@@ -1126,7 +1126,7 @@ make_sock_port(int stype, const char* ifname, int port,
 	int use_systemd, int dscp, struct unbound_socket* ub_sock,
 	const char* additional)
 {
-	char* s = strchr(ifname, '@');
+	const char* s = strchr(ifname, '@');
 	if(s) {
 		/* override port with ifspec@port */
 		int port;
@@ -2167,7 +2167,8 @@ void tcp_req_info_clear(struct tcp_req_info* req)
 	open = req->open_req_list;
 	while(open) {
 		nopen = open->next;
-		mesh_state_remove_reply(open->mesh, open->mesh_state, req->cp);
+		mesh_state_remove_reply(open->mesh, open->mesh_state, req->cp,
+			NULL);
 		free(open);
 		open = nopen;
 	}
@@ -3625,7 +3626,8 @@ doq_conn_delete(struct doq_conn* conn, struct doq_table* table)
 	lock_rw_unlock(&conn->table->conid_lock);
 	/* Remove the app data from ngtcp2 before SSL_free of conn->ssl,
 	 * because the ngtcp2 conn is deleted. */
-	SSL_set_app_data(conn->ssl, NULL);
+	if(conn->ssl)
+		SSL_set_app_data(conn->ssl, NULL);
 	if(conn->stream_tree.count != 0) {
 		traverse_postorder(&conn->stream_tree, stream_tree_del, table);
 	}
@@ -4771,7 +4773,7 @@ doq_ssl_server_setup(SSL_CTX* ctx, struct doq_conn* conn)
 	SSL_set_app_data(ssl, conn);
 #endif
 	SSL_set_accept_state(ssl);
-#ifdef USE_NGTCP2_CRYPTO_OSSL
+#ifdef HAVE_SSL_SET_QUIC_TLS_EARLY_DATA_ENABLED
 	SSL_set_quic_tls_early_data_enabled(ssl, 1);
 #else
 	SSL_set_quic_early_data_enabled(ssl, 1);
@@ -4879,6 +4881,7 @@ doq_conn_setup(struct doq_conn* conn, uint8_t* scid, size_t scidlen,
 	rv = ngtcp2_conn_server_new(&conn->conn, &scid_cid, &sv_scid, &path,
 		conn->version, &callbacks, &settings, &params, NULL, conn);
 	if(rv != 0) {
+		conn->conn = NULL;
 		lock_rw_unlock(&conn->table->conid_lock);
 		log_err("ngtcp2_conn_server_new failed: %s",
 			ngtcp2_strerror(rv));
