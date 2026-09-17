@@ -1952,6 +1952,17 @@ These options are part of the ``server:`` section.
     Default: no
 
 
+@@UAHL@unbound.conf@harden-cname-follow@@: *<yes or no>*
+    Harden CNAME redirections by following them.
+    If no, then upstream CNAME and DNAME redirections are allowed in a
+    response without checking with further messages if those are valid.
+    It can only really be disabled safely on localhost net or encrypted
+    connectivity.
+    Default is on to protect the cache integrity.
+
+    Default: yes
+
+
 @@UAHL@unbound.conf@use-caps-for-id@@: *<yes or no>*
     Use 0x20-encoded random bits in the query to foil spoof attempts.
     This perturbs the lowercase and uppercase of query names sent to authority
@@ -2054,6 +2065,13 @@ These options are part of the ``server:`` section.
     The defensive action is to clear the rrset and message caches, hopefully
     flushing away any poison.
     A value of 10 million is suggested.
+
+    It is useful to add 0.0.0.0/8 and '::' to the
+    :ref:`do-not-query-address<unbound.conf.do-not-query-address>` list.
+    Otherwise they may be answered, from localhost, and the different source
+    makes an unwanted reply that unnecessarily ticks up.
+    The :ref:`do-not-query-localhost<unbound.conf.do-not-query-localhost>`
+    option includes them, the zero subnets, when it is enabled.
 
     Default: 0 (disabled)
 
@@ -2219,6 +2237,9 @@ These options are part of the ``server:`` section.
     It is possible to use wildcards with this statement, the wildcard is
     expanded on start and on reload.
 
+    A wildcard that matches no files is not an error: the entry loads no
+    trust anchors, and the condition is logged at operational verbosity.
+
     Default: "" (no trusted keys file)
 
 
@@ -2313,7 +2334,7 @@ These options are part of the ``server:`` section.
     Use this setting to protect the users that rely on this validator for
     authentication from potentially bad data in the additional section.
 
-    Default: yes
+    Default: no
 
 
 @@UAHL@unbound.conf@val-log-level@@: *<number>*
@@ -2585,6 +2606,9 @@ These options are part of the ``server:`` section.
     :ref:`inform_redirect<unbound.conf.local-zone.type.inform_redirect>`,
     :ref:`always_transparent<unbound.conf.local-zone.type.always_transparent>`,
     :ref:`block_a<unbound.conf.local-zone.type.block_a>`,
+    :ref:`block_aaaa<unbound.conf.local-zone.type.block_aaaa>`,
+    :ref:`block_a_wdata<unbound.conf.local-zone.type.block_a_wdata>`,
+    :ref:`block_aaaa_wdata<unbound.conf.local-zone.type.block_aaaa_wdata>`,
     :ref:`always_refuse<unbound.conf.local-zone.type.always_refuse>`,
     :ref:`always_nxdomain<unbound.conf.local-zone.type.always_nxdomain>`,
     :ref:`always_null<unbound.conf.local-zone.type.always_null>`,
@@ -2733,6 +2757,26 @@ These options are part of the ``server:`` section.
         For A queries it unconditionally returns NODATA.
         Useful in cases when there is a need to explicitly force all apps to
         use IPv6 protocol and avoid any queries to IPv4.
+
+    @@UAHL@unbound.conf.local-zone.type@block_aaaa@@
+        Like :ref:`transparent<unbound.conf.local-zone.type.transparent>` or
+        :ref:`block_a<unbound.conf.local-zone.type.block_a>`, but
+        ignores local data and resolves normally all query types excluding AAAA.
+        For AAAA queries it unconditionally returns NODATA.
+        Useful in cases when there is a need to explicitly force all apps to
+        use IPv4 protocol and avoid any queries to IPv6.
+
+    @@UAHL@unbound.conf.local-zone.type@block_a_wdata@@
+        Like :ref:`block_a<unbound.conf.local-zone.type.block_a>`, but
+        uses local data if present.
+        If there is local data that is returned, and it acts like transparent.
+        For A queries it returns NODATA.
+
+    @@UAHL@unbound.conf.local-zone.type@block_aaaa_wdata@@
+        Like :ref:`block_aaaa<unbound.conf.local-zone.type.block_aaaa>`, but
+        uses local data if present.
+        If there is local data that is returned, and it acts like transparent.
+        For AAAA queries it returns NODATA.
 
     @@UAHL@unbound.conf.local-zone.type@always_refuse@@
         Like :ref:`refuse<unbound.conf.local-zone.type.refuse>`, but ignores
@@ -3326,6 +3370,26 @@ These options are part of the ``server:`` section.
     same zone as a spoofed packet.
 
     Default: yes
+
+
+@@UAHL@unbound.conf@val-validation-attempts@@: *<number>*
+    Limit on the number of DNSSEC validation attempts for a query.
+    This protects against too large numbers of cryptographic operations,
+    like for a deep delegation chain.
+    This counts attempts to validate RRSIGs.
+    When it is exceeded, the query fails.
+
+    Default: 32
+
+
+@@UAHL@unbound.conf@val-hash-attempts@@: *<number>*
+    Limit on the number of DNSSEC hash attempts for a query.
+    This protects against too large numbers of cryptographic operations,
+    like for a deep delegation chain.
+    This counts DS hash attempts to match DNSKEYs.
+    When it is exceeded, the query fails.
+
+    Default: 32
 
 
 @@UAHL@unbound.conf@fast-server-permil@@: *<number>*

@@ -43,6 +43,7 @@
 #include "config.h"
 #include "libunbound/context.h"
 #include "libunbound/worker.h"
+#include "libunbound/remote.h"
 #include "util/fptr_wlist.h"
 #include "util/log.h"
 #include "services/mesh.h"
@@ -124,6 +125,12 @@ wsvc_cron_cb(void* ATTR_UNUSED(arg))
 
 void 
 worker_alloc_cleanup(void* ATTR_UNUSED(arg))
+{
+	log_assert(0);
+}
+
+void
+libworker_alloc_cleanup(void* ATTR_UNUSED(arg))
 {
 	log_assert(0);
 }

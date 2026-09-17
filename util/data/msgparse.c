@@ -687,6 +687,9 @@ calc_size(sldns_buffer* pkt, uint16_t type, struct rr_parse* rr)
 			}
 			rdf++;
 		}
+		/* rdata ended before all _dname_count names were seen */
+		if(count != 0)
+			return 0; /* the rdata is too short. */
 	}
 	/* remaining rdata */
 	rr->size += pkt_len;
@@ -971,7 +974,6 @@ parse_edns_options_from_query(uint8_t* rdata_ptr, size_t rdata_len,
 	}
 
 	/* while still more options, and have code+len to read */
-	/* ignores partial content (i.e. rdata len 3) */
 	while(rdata_len >= 4 && i < MAX_PARSED_EDNS_OPTIONS) {
 		uint16_t opt_code = sldns_read_uint16(rdata_ptr);
 		uint16_t opt_len = sldns_read_uint16(rdata_ptr+2);
@@ -981,8 +983,10 @@ parse_edns_options_from_query(uint8_t* rdata_ptr, size_t rdata_len,
 
 		rdata_ptr += 4;
 		rdata_len -= 4;
-		if(opt_len > rdata_len)
-			break; /* option code partial */
+		if(opt_len > rdata_len) {
+			/* option code partial */
+			return LDNS_RCODE_FORMERR;
+		}
 
 		/* handle parse time edns options here */
 		switch(opt_code) {
@@ -1030,8 +1034,11 @@ parse_edns_options_from_query(uint8_t* rdata_ptr, size_t rdata_len,
 			break;
 
 		case LDNS_EDNS_PADDING:
-			if(!cfg || !cfg->pad_responses ||
-					!c || c->type != comm_tcp ||!c->ssl || padding_seen)
+			if(!cfg || !cfg->pad_responses || !c || padding_seen)
+				break;
+			if(!((c->type == comm_tcp && c->ssl) ||
+				(c->type == comm_http && c->ssl) ||
+				c->type == comm_doq))
 				break;
 			padding_seen = 1;
 			if(!edns_opt_list_append(&edns->opt_list_out,
@@ -1068,13 +1075,13 @@ parse_edns_options_from_query(uint8_t* rdata_ptr, size_t rdata_len,
 			 * purposes. It will be overwritten if (re)creation
 			 * is needed.
 			 */
-			if(repinfo->remote_addr.ss_family == AF_INET) {
+			if(repinfo->client_addr.ss_family == AF_INET) {
 				memcpy(server_cookie + 16,
-					&((struct sockaddr_in*)&repinfo->remote_addr)->sin_addr, 4);
+					&((struct sockaddr_in*)&repinfo->client_addr)->sin_addr, 4);
 			} else {
 				cookie_is_v4 = 0;
 				memcpy(server_cookie + 16,
-					&((struct sockaddr_in6*)&repinfo->remote_addr)->sin6_addr, 16);
+					&((struct sockaddr_in6*)&repinfo->client_addr)->sin6_addr, 16);
 			}
 
 			if(cfg->cookie_secret_file &&
@@ -1154,6 +1161,9 @@ parse_edns_options_from_query(uint8_t* rdata_ptr, size_t rdata_len,
 		rdata_len -= opt_len;
 		i++;
 	}
+	/* partial content (i.e. rdata len 3) is FORMERR */
+	if(rdata_len > 0 && rdata_len <= 3)
+		return LDNS_RCODE_FORMERR;
 	return LDNS_RCODE_NOERROR;
 }
 
@@ -1234,6 +1244,8 @@ parse_extract_edns_from_response_msg(struct msg_parse* msg,
 		rdata_len -= 4;
 		if(opt_len > rdata_len)
 			break; /* option code partial */
+			/* This is lenient for partially broken messages
+			 * from upstream. With a partial EDNS option. */
 
 		if(!edns_opt_list_append(&edns->opt_list_in,
 				opt_code, opt_len, rdata_ptr, region)) {

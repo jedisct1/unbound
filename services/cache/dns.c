@@ -43,6 +43,7 @@
 #include "iterator/iter_utils.h"
 #include "validator/val_nsec.h"
 #include "validator/val_utils.h"
+#include "iterator/iter_utils.h"
 #include "services/cache/dns.h"
 #include "services/cache/rrset.h"
 #include "util/data/msgparse.h"
@@ -94,7 +95,8 @@ store_rrsets(struct module_env* env, struct reply_info* rep, time_t now,
 		case 2: /* ref updated, cache is superior */
 			if(region) {
 				struct ub_packed_rrset_key* ck;
-				lock_rw_rdlock(&rep->ref[i].key->entry.lock);
+				/* the entry is already readlocked from the
+				 * check in rrset_cache_update. */
 				/* if deleted rrset, do not copy it */
 				if(rep->ref[i].key->id == 0 ||
 					rep->ref[i].id != rep->ref[i].key->id)
@@ -115,6 +117,8 @@ store_rrsets(struct module_env* env, struct reply_info* rep, time_t now,
 						qrep->serve_expired_ttl = qrep->ttl + SERVE_EXPIRED_TTL;
 					}
 				}
+			} else {
+				lock_rw_unlock(&rep->ref[i].key->entry.lock);
 			}
 			/* no break: also copy key item */
 			/* the line below is matched by gcc regex and silences
@@ -277,6 +281,8 @@ find_closest_of_type(struct module_env* env, uint8_t* qname, size_t qnamelen,
 
 		/* snip off front label */
 		lablen = *qname;
+		if(lablen == 0)
+			break;
 		qname += lablen + 1;
 		qnamelen -= lablen + 1;
 	}
@@ -584,7 +590,8 @@ dns_cache_find_delegation(struct module_env* env, uint8_t* qname,
 			return NULL;
 		}
 	}
-	if(!delegpt_rrset_add_ns(dp, region, nskey, 0)) {
+	if(!delegpt_rrset_add_ns(dp, region, nskey, 0,
+		deleg_port_number(env))) {
 		lock_rw_unlock(&nskey->entry.lock);
 		log_err("find_delegation: addns out of memory");
 		return NULL;
@@ -673,7 +680,7 @@ tomsg(struct module_env* env, struct query_info* q, struct reply_info* r,
 		rrset_array_unlock(r->ref, r->rrset_count);
 		return NULL;
 	}
-	if(r->security == sec_status_secure && !reply_all_rrsets_secure(r)) {
+	if(r->security == sec_status_secure && !reply_an_ns_rrsets_secure(r)) {
 		/* message rrsets have changed status, revalidate */
 		rrset_array_unlock(r->ref, r->rrset_count);
 		return NULL;
@@ -1075,7 +1082,7 @@ dns_cache_lookup(struct module_env* env,
 	if(env->cfg->harden_below_nxdomain) {
 		while(!dname_is_root(k.qname)) {
 			if(dpname && dpnamelen
-				&& !dname_subdomain_c(k.qname, dpname))
+				&& !dname_strict_subdomain_c(k.qname, dpname))
 				break; /* no synth nxdomain above the stub */
 			dname_remove_label(&k.qname, &k.qname_len);
 			h = query_info_hash(&k, flags);
@@ -1204,9 +1211,9 @@ dns_cache_store(struct module_env* env, struct query_info* msgqinf,
 				rep->rrsets[i]->entry.data, *env->now);
 			ref.key = rep->rrsets[i];
 			ref.id = rep->rrsets[i]->id;
-			/*ignore ret: it was in the cache, ref updated */
+			/* if it was in the cache, ref updated */
 			/* no leeway for typeNS */
-			(void)rrset_cache_update(env->rrset_cache, &ref, 
+			rrset_cache_update_unlock(env->rrset_cache, &ref,
 				env->alloc,
 				((ntohs(ref.key->rk.type)==LDNS_RR_TYPE_NS
 				 && !pside) ? qstarttime:*env->now + leeway));

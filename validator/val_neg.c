@@ -42,12 +42,6 @@
  * from cached NSEC records.
  */
 #include "config.h"
-#ifdef HAVE_OPENSSL_SSL_H
-#include <openssl/ssl.h>
-#define NSEC3_SHA_LEN SHA_DIGEST_LENGTH
-#else
-#define NSEC3_SHA_LEN 20
-#endif
 #include "validator/val_neg.h"
 #include "validator/val_nsec.h"
 #include "validator/val_nsec3.h"
@@ -694,6 +688,8 @@ static void wipeout(struct val_neg_cache* neg, struct val_neg_zone* zone,
 	if(ntohs(nsec->rk.type) == LDNS_RR_TYPE_NSEC) {
 		end = d->rr_data[0]+2;
 		end_len = dname_valid(end, d->rr_len[0]-2);
+		if(!end_len)
+			return;
 		end_labs = dname_count_labels(end);
 	} else {
 		/* NSEC3 */
@@ -938,6 +934,10 @@ void val_neg_addreply(struct val_neg_cache* neg, struct reply_info* rep)
 			continue;
 		if(!dname_subdomain_c(rep->rrsets[i]->rk.dname, 
 			zone->name)) continue;
+		if(ntohs(rep->rrsets[i]->rk.type) == LDNS_RR_TYPE_NSEC &&
+			!nsec_nextowner_subdomain(rep->rrsets[i], zone->name)) {
+			continue; /* nextowner not in zone */
+		}
 		/* insert NSEC into this zone's tree */
 		neg_insert_data(neg, zone, rep->rrsets[i]);
 	}
@@ -1022,6 +1022,10 @@ void val_neg_addreferral(struct val_neg_cache* neg, struct reply_info* rep,
 			continue;
 		if(!dname_subdomain_c(rep->rrsets[i]->rk.dname, 
 			zone->name)) continue;
+		if(ntohs(rep->rrsets[i]->rk.type) == LDNS_RR_TYPE_NSEC &&
+			!nsec_nextowner_subdomain(rep->rrsets[i], zone->name)) {
+			continue; /* nextowner not in zone */
+		}
 		/* insert NSEC into this zone's tree */
 		neg_insert_data(neg, zone, rep->rrsets[i]);
 	}
@@ -1110,12 +1114,14 @@ grab_nsec(struct rrset_cache* rrset_cache, uint8_t* qname, size_t qname_len,
  * @param rrset_cache: rrset cache
  * @param now: to check ttl against
  * @param region: where to alloc result
+ * @param topname: do not look higher than this name, so that the
+ *   result cannot be taken from a zone above the current trust anchor.
  * @return rrset or NULL
  */
 static struct ub_packed_rrset_key*
 neg_find_nsec(struct val_neg_cache* neg_cache, uint8_t* qname, size_t qname_len,
 	uint16_t qclass, struct rrset_cache* rrset_cache, time_t now,
-	struct regional* region)
+	struct regional* region, uint8_t* topname)
 {
 	int labs;
 	uint32_t flags;
@@ -1130,6 +1136,11 @@ neg_find_nsec(struct val_neg_cache* neg_cache, uint8_t* qname, size_t qname_len,
 	while(zone && !zone->in_use)
 		zone = zone->parent;
 	if(!zone) {
+		lock_basic_unlock(&neg_cache->lock);
+		return NULL;
+	}
+	if(topname && !dname_subdomain_c(zone->name, topname)) {
+		/* Reject NSEC not within trust anchor's bailiwick */
 		lock_basic_unlock(&neg_cache->lock);
 		return NULL;
 	}
@@ -1430,7 +1441,7 @@ val_neg_getmsg(struct val_neg_cache* neg, struct query_info* qinfo,
 
 	/* Get best available NSEC for qname */
 	nsec = neg_find_nsec(neg, qinfo->qname, qinfo->qname_len, qinfo->qclass,
-		rrset_cache, now, region);
+		rrset_cache, now, region, topname);
 
 	/* Matching NSEC, use to generate No Data answer. Not creating answers
 	 * yet for No Data proven using wildcard. */
@@ -1510,7 +1521,7 @@ val_neg_getmsg(struct val_neg_cache* neg, struct query_info* qinfo,
 				 * proof */
 				if(!(wcrr = neg_find_nsec(neg, wc_qinfo.qname,
 					wc_qinfo.qname_len, qinfo->qclass,
-					rrset_cache, now, region)))
+					rrset_cache, now, region, topname)))
 					return NULL;
 
 				nodata_wc = NULL;

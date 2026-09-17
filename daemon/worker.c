@@ -863,7 +863,7 @@ answer_from_cache(struct worker* worker, struct query_info* qinfo,
 			"validation");
 		goto bail_out; /* need to validate cache entry first */
 	} else if(rep->security == sec_status_secure) {
-		if(reply_all_rrsets_secure(rep)) {
+		if(reply_an_ns_rrsets_secure(rep)) {
 			*is_secure_answer = 1;
 		} else {
 			if(must_validate) {
@@ -1555,6 +1555,7 @@ worker_handle_request(struct comm_point* c, void* arg, int error,
 				return 0;
 			}
 			query_error(c->buffer, LDNS_RCODE_FORMERR, 0);
+			sldns_buffer_copy(c->dnscrypt_buffer, c->buffer);
 			return 1;
 		}
 		dname_str(qinfo.qname, buf);
@@ -1573,6 +1574,7 @@ worker_handle_request(struct comm_point* c, void* arg, int error,
 			query_error(c->buffer, LDNS_RCODE_SERVFAIL,
 				qinfo.qname_len);
 			worker->stats.num_query_dnscrypt_cleartext++;
+			sldns_buffer_copy(c->dnscrypt_buffer, c->buffer);
 			return 1;
 		}
 		worker->stats.num_query_dnscrypt_cert++;
@@ -1704,6 +1706,8 @@ worker_handle_request(struct comm_point* c, void* arg, int error,
 		}
 		memset(&reply_edns, 0, sizeof(reply_edns));
 		reply_edns.edns_present = 1;
+		reply_edns.edns_version = EDNS_ADVERTISED_VERSION;
+		reply_edns.udp_size = EDNS_ADVERTISED_SIZE;
 		error_encode(c->buffer, ret, &qinfo,
 			*(uint16_t*)(void *)sldns_buffer_begin(c->buffer),
 			sldns_buffer_read_u16_at(c->buffer, 2), &reply_edns);
@@ -1833,7 +1837,13 @@ worker_handle_request(struct comm_point* c, void* arg, int error,
 		server_stats_insquery(&worker->stats, c, qinfo.qtype,
 			qinfo.qclass, &edns, repinfo);
 	if(c->type != comm_udp)
+#ifdef USE_DNSCRYPT
+		edns.udp_size = (c->dnscrypt && repinfo->is_dnscrypted)
+			? sldns_buffer_capacity(c->buffer) - DNSCRYPT_REPLY_HEADER_SIZE
+			: 65535;
+#else
 		edns.udp_size = 65535; /* max size for TCP replies */
+#endif
 	if(qinfo.qclass == LDNS_RR_CLASS_CH && answer_chaos(worker, &qinfo,
 		&edns, repinfo, c->buffer)) {
 		regional_free_all(worker->scratchpad);
@@ -2121,7 +2131,7 @@ send_reply_rc:
 		}
 	}
 #ifdef USE_DNSCRYPT
-	if(!dnsc_handle_uncurved_request(repinfo)) {
+	if(!dnsc_handle_uncurved_request(repinfo, c->buffer)) {
 		return 0;
 	}
 #endif
@@ -2234,23 +2244,16 @@ void worker_probe_timer_cb(void* arg)
 }
 
 struct worker*
-worker_create(struct daemon* daemon, int id, int* ports, int n)
+worker_create(struct daemon* daemon, int id)
 {
 	unsigned int seed;
 	struct worker* worker = (struct worker*)calloc(1,
 		sizeof(struct worker));
 	if(!worker)
 		return NULL;
-	worker->numports = n;
-	worker->ports = (int*)memdup(ports, sizeof(int)*n);
-	if(!worker->ports) {
-		free(worker);
-		return NULL;
-	}
 	worker->daemon = daemon;
 	worker->thread_num = id;
 	if(!(worker->cmd = tube_create())) {
-		free(worker->ports);
 		free(worker);
 		return NULL;
 	}
@@ -2258,7 +2261,6 @@ worker_create(struct daemon* daemon, int id, int* ports, int n)
 	if(!(worker->rndstate = ub_initstate(daemon->rand))) {
 		log_err("could not init random numbers.");
 		tube_delete(worker->cmd);
-		free(worker->ports);
 		free(worker);
 		return NULL;
 	}
@@ -2357,14 +2359,14 @@ worker_init(struct worker* worker, struct config_file *cfg,
 		cfg->out_ifs, cfg->num_out_ifs, cfg->do_ip4, cfg->do_ip6,
 		cfg->do_tcp?cfg->outgoing_num_tcp:0, cfg->ip_dscp,
 		worker->daemon->env->infra_cache, worker->rndstate,
-		cfg->use_caps_bits_for_id, worker->ports, worker->numports,
+		cfg->use_caps_bits_for_id,
 		cfg->unwanted_threshold, cfg->outgoing_tcp_mss,
 		&worker_alloc_cleanup, worker,
 		cfg->do_udp || cfg->udp_upstream_without_downstream,
 		worker->daemon->connect_dot_sslctx, cfg->delay_close,
 		cfg->tls_use_sni, dtenv, cfg->udp_connect,
 		cfg->max_reuse_tcp_queries, cfg->tcp_reuse_timeout,
-		cfg->tcp_auth_query_timeout);
+		cfg->tcp_auth_query_timeout, worker->daemon->shared_ports);
 	if(!worker->back) {
 		log_err("could not create outgoing sockets");
 		worker_delete(worker);
@@ -2383,6 +2385,8 @@ worker_init(struct worker* worker, struct config_file *cfg,
 		worker_stat_timer_cb, worker);
 	if(!worker->stat_timer) {
 		log_err("could not create statistics timer");
+		worker_delete(worker);
+		return 0;
 	}
 
 	/* we use the msg_buffer_size as a good estimate for what the
@@ -2515,7 +2519,6 @@ worker_delete(struct worker* worker)
 	tube_delete(worker->cmd);
 	comm_timer_delete(worker->stat_timer);
 	comm_timer_delete(worker->env.probe_timer);
-	free(worker->ports);
 	if(worker->thread_num == 0) {
 #ifdef UB_ON_WINDOWS
 		wsvc_desetup_worker(worker);
@@ -2647,6 +2650,11 @@ void libworker_bg_done_cb(void* ATTR_UNUSED(arg), int ATTR_UNUSED(rcode),
 void libworker_event_done_cb(void* ATTR_UNUSED(arg), int ATTR_UNUSED(rcode),
 	sldns_buffer* ATTR_UNUSED(buf), enum sec_status ATTR_UNUSED(s),
 	char* ATTR_UNUSED(why_bogus), int ATTR_UNUSED(was_ratelimited))
+{
+	log_assert(0);
+}
+
+void libworker_alloc_cleanup(void* ATTR_UNUSED(arg))
 {
 	log_assert(0);
 }

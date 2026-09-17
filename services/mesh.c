@@ -373,7 +373,7 @@ mesh_serve_expired_lookup(struct module_qstate* qstate,
 			"validation");
 		goto bail_out; /* need to validate cache entry first */
 	} else if(msg->rep->security == sec_status_secure &&
-		!reply_all_rrsets_secure(msg->rep) && must_validate) {
+		!reply_an_ns_rrsets_secure(msg->rep) && must_validate) {
 			verbose(VERB_ALGO, "Serve expired: secure entry"
 				" changed status");
 			goto bail_out; /* rrset changed, re-verify */
@@ -506,6 +506,8 @@ void mesh_new_client(struct mesh_area* mesh, struct query_info* qinfo,
 				"incoming query.");
 			if(rep->c->use_h2)
 				http2_stream_remove_mesh_state(rep->c->h2_stream);
+			else if(rep->c->type == comm_doq && rep->doq_stream)
+				doq_stream_remove_mesh_state(rep->doq_stream);
 			comm_point_drop_reply(rep);
 			mesh->stats_dropped++;
 			return;
@@ -519,6 +521,8 @@ void mesh_new_client(struct mesh_area* mesh, struct query_info* qinfo,
 				"dropping incoming query.");
 			if(rep->c->use_h2)
 				http2_stream_remove_mesh_state(rep->c->h2_stream);
+			else if(rep->c->type == comm_doq && rep->doq_stream)
+				doq_stream_remove_mesh_state(rep->doq_stream);
 			comm_point_drop_reply(rep);
 			mesh->num_queries_replyaddr_limit++;
 			return;
@@ -593,6 +597,8 @@ void mesh_new_client(struct mesh_area* mesh, struct query_info* qinfo,
 	added_tcp = 1;
 	if(rep->c->use_h2) {
 		http2_stream_add_meshstate(rep->c->h2_stream, mesh, s);
+	} else if(rep->c->type == comm_doq && rep->doq_stream) {
+		doq_stream_add_meshstate(rep->doq_stream, mesh, s);
 	}
 	/* add serve expired timer if required and not already there */
 	if(timeout && !mesh_serve_expired_init(s, timeout)) {
@@ -648,6 +654,8 @@ servfail_mem:
 		qinfo, qid, qflags, edns);
 	if(rep->c->use_h2)
 		http2_stream_remove_mesh_state(rep->c->h2_stream);
+	else if(rep->c->type == comm_doq && rep->doq_stream)
+		doq_stream_remove_mesh_state(rep->doq_stream);
 	comm_point_send_reply(rep);
 	if(added_reply_without_accounting) {
 		mesh_remove_reply_without_accounting(s, repadded);
@@ -957,33 +965,9 @@ void mesh_report_reply(struct mesh_area* mesh, struct outbound_entry* e,
 	mesh_run(mesh, e->qstate->mesh_info, event, e);
 }
 
-/** copy strlist to region */
-static struct config_strlist*
-cfg_region_strlist_copy(struct regional* region, struct config_strlist* list)
-{
-	struct config_strlist* result = NULL, *last = NULL, *s = list;
-	while(s) {
-		struct config_strlist* n = regional_alloc_zero(region,
-			sizeof(*n));
-		if(!n)
-			return NULL;
-		n->str = regional_strdup(region, s->str);
-		if(!n->str)
-			return NULL;
-		if(last)
-			last->next = n;
-		else	result = n;
-		last = n;
-		s = s->next;
-	}
-	return result;
-}
-
-/** Copy the client info to the query region. */
-static struct respip_client_info*
+struct respip_client_info*
 mesh_copy_client_info(struct regional* region, struct respip_client_info* cinfo)
 {
-	size_t i;
 	struct respip_client_info* client_info;
 	client_info = regional_alloc_init(region, cinfo, sizeof(*cinfo));
 	if(!client_info)
@@ -1002,20 +986,13 @@ mesh_copy_client_info(struct regional* region, struct respip_client_info* cinfo)
 		if(!client_info->tag_actions)
 			return NULL;
 	}
-	if(cinfo->tag_datas) {
-		client_info->tag_datas = regional_alloc_zero(region,
-			sizeof(struct config_strlist*)*cinfo->tag_datas_size);
-		if(!client_info->tag_datas)
-			return NULL;
-		for(i=0; i<cinfo->tag_datas_size; i++) {
-			if(cinfo->tag_datas[i]) {
-				client_info->tag_datas[i] = cfg_region_strlist_copy(
-					region, cinfo->tag_datas[i]);
-				if(!client_info->tag_datas[i])
-					return NULL;
-			}
-		}
-	}
+	/* tag_datas is owned by the matched acl_addr in config_file; its
+	 * lifetime is until config reload, which tears down all mesh states
+	 * first. Keep the original pointer so client_info_compare()
+	 * can recognise two states from the same ACL entry. */
+	/* fast reload insists on dropping the queries when interface-tag-data
+	 * or access-control-tag-data are changed. */
+	/* client_info->tag_datas already copied by regional_alloc_init above */
 	if(cinfo->view) {
 		/* Do not copy the view pointer but store a name instead.
 		 * The name is looked up later when done, this means that
@@ -1023,6 +1000,11 @@ mesh_copy_client_info(struct regional* region, struct respip_client_info* cinfo)
 		client_info->view = NULL;
 		client_info->view_name = regional_strdup(region,
 			cinfo->view->name);
+		if(!client_info->view_name)
+			return NULL;
+	} else if(cinfo->view_name) {
+		client_info->view_name = regional_strdup(region,
+			cinfo->view_name);
 		if(!client_info->view_name)
 			return NULL;
 	}
@@ -1115,6 +1097,18 @@ mesh_state_make_unique(struct mesh_state* mstate)
 	mstate->unique = mstate;
 }
 
+/** pop a reply from the reply list, if there are any. */
+static struct mesh_reply*
+mesh_reply_list_pop_first(struct mesh_state* mstate)
+{
+	if(mstate->reply_list) {
+		struct mesh_reply* r = mstate->reply_list;
+		mstate->reply_list = r->next;
+		return r;
+	}
+	return NULL;
+}
+
 void
 mesh_state_cleanup(struct mesh_state* mstate)
 {
@@ -1130,15 +1124,30 @@ mesh_state_cleanup(struct mesh_state* mstate)
 	}
 	/* drop unsent replies */
 	if(!mstate->replies_sent) {
-		struct mesh_reply* rep = mstate->reply_list;
+		struct mesh_reply* rep;
 		struct mesh_cb* cb;
-		/* in tcp_req_info, the mstates linked are removed, but
-		 * the reply_list is now NULL, so the remove-from-empty-list
-		 * takes no time and also it does not do the mesh accounting */
-		mstate->reply_list = NULL;
-		for(; rep; rep=rep->next) {
+		/* Pop items from the list, that means there is no iterator.
+		 * And then items can be removed from the reply list, from
+		 * like comm_point_drop_reply and comm_point_close calls.
+		 * As the tcp_req_info and http2 code drops the entire
+		 * connection. That could delete mesh_reply items previous and
+		 * after the current state. The previous items are already
+		 * popped. And the next items can be altered, like to when a
+		 * connection has more replies on the reply list.
+		 * The current item is also popped so the code needs to
+		 * remove its references. */
+		while((rep = mesh_reply_list_pop_first(mstate)) != NULL) {
 			infra_wait_limit_dec(mesh->env->infra_cache,
 				&rep->query_reply, mesh->env->cfg);
+			if(rep->query_reply.c->tcp_req_info)
+				tcp_req_info_remove_mesh_state(
+					rep->query_reply.c->tcp_req_info,
+					mstate);
+			else if(rep->query_reply.c->use_h2)
+				http2_stream_remove_mesh_state(rep->h2_stream);
+			else if(rep->query_reply.doq_stream)
+				doq_stream_remove_mesh_state(
+					rep->query_reply.doq_stream);
 			comm_point_drop_reply(&rep->query_reply);
 			log_assert(mesh->num_reply_addrs > 0);
 			mesh->num_reply_addrs--;
@@ -1502,12 +1511,6 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 	struct timeval end_time;
 	struct timeval duration;
 	int secure;
-	/* briefly set the replylist to null in case the
-	 * meshsendreply calls tcpreqinfo sendreply that
-	 * comm_point_drops because of size, and then the
-	 * null stops the mesh state remove and thus
-	 * reply_list modification and accounting */
-	struct mesh_reply* rlist = m->reply_list;
 
 	/* rpz: apply actions */
 	rcode = mesh_is_udp(r) && mesh_is_rpz_respip_tcponly_action(m)
@@ -1533,6 +1536,10 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 		 * for HTTP/2 stream to refer to mesh state, in case
 		 * connection gets cleanup before HTTP/2 stream close. */
 		r->h2_stream->mesh_state = NULL;
+#ifdef HAVE_NGTCP2
+	} else if(r->query_reply.doq_stream) {
+		r->query_reply.doq_stream->mesh_state = NULL;
+#endif
 	}
 	/* send the reply */
 	/* We don't reuse the encoded answer if:
@@ -1560,9 +1567,7 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 		sldns_buffer_write_at(r_buffer, 0, &r->qid, sizeof(uint16_t));
 		sldns_buffer_write_at(r_buffer, 12, r->qname,
 			m->s.qinfo.qname_len);
-		m->reply_list = NULL;
 		comm_point_send_reply(&r->query_reply);
-		m->reply_list = rlist;
 	} else if(rcode) {
 		m->s.qinfo.qname = r->qname;
 		m->s.qinfo.local_alias = r->local_alias;
@@ -1584,9 +1589,7 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 		}
 		error_encode(r_buffer, rcode, &m->s.qinfo, r->qid,
 			r->qflags, &r->edns);
-		m->reply_list = NULL;
 		comm_point_send_reply(&r->query_reply);
-		m->reply_list = rlist;
 	} else {
 		size_t udp_size = r->edns.udp_size;
 		r->edns.edns_version = EDNS_ADVERTISED_VERSION;
@@ -1622,9 +1625,7 @@ mesh_send_reply(struct mesh_state* m, int rcode, struct reply_info* rep,
 			error_encode(r_buffer, LDNS_RCODE_SERVFAIL,
 				&m->s.qinfo, r->qid, r->qflags, &r->edns);
 		}
-		m->reply_list = NULL;
 		comm_point_send_reply(&r->query_reply);
-		m->reply_list = rlist;
 	}
 	infra_wait_limit_dec(m->s.env->infra_cache, &r->query_reply,
 		m->s.env->cfg);
@@ -1687,9 +1688,9 @@ static void dns_error_reporting(struct module_qstate* qstate,
 	opt = edns_opt_list_find(qstate->edns_opts_back_in,
 		LDNS_EDNS_REPORT_CHANNEL);
 	if(!opt) return;
-	agent_domain_len = opt->opt_len;
 	agent_domain = opt->opt_data;
-	if(dname_valid(agent_domain, agent_domain_len) < 3) {
+	agent_domain_len = dname_valid(agent_domain, opt->opt_len);
+	if(agent_domain_len < 3) {
 		/* The agent domain needs to be a valid dname that is not the
 		 * root; from RFC9567. */
 		return;
@@ -1776,6 +1777,7 @@ void mesh_query_done(struct mesh_state* mstate)
 	struct reply_info* rep = (mstate->s.return_msg?
 		mstate->s.return_msg->rep:NULL);
 	struct timeval tv = {0, 0};
+	struct mesh_area* mesh = mstate->s.env->mesh;
 	int i = 0;
 	/* No need for the serve expired timer anymore; we are going to reply. */
 	if(mstate->s.serve_expired_data) {
@@ -1800,7 +1802,18 @@ void mesh_query_done(struct mesh_state* mstate)
 		&& (!rep || rep->security != sec_status_secure))
 		dns_error_reporting(&mstate->s, rep);
 
-	for(r = mstate->reply_list; r; r = r->next) {
+	while((r = mesh_reply_list_pop_first(mstate)) != NULL) {
+
+		/* it was not detached (because it had a reply list), could be now */
+		if(!mstate->reply_list && !mstate->cb_list
+			&& mstate->super_set.count == 0) {
+			mesh->num_detached_states++;
+		}
+		/* if not replies any more in mstate, it is no longer a reply_state */
+		if(!mstate->reply_list && !mstate->cb_list) {
+			log_assert(mesh->num_reply_states > 0);
+			mesh->num_reply_states--;
+		}
 		if(mesh_is_udp(r)) {
 			/* For UDP queries, the old replies are discarded.
 			 * This stops a large volume of old replies from
@@ -1815,20 +1828,18 @@ void mesh_query_done(struct mesh_state* mstate)
 				((int)old.tv_sec)*1000+((int)old.tv_usec)/1000 >
 				mstate->s.env->cfg->discard_timeout) {
 				/* Drop the reply, it is too old */
-				/* briefly set the reply_list to NULL, so that the
-				 * tcp req info cleanup routine that calls the mesh
-				 * to deregister the meshstate for it is not done
-				 * because the list is NULL and also accounting is not
-				 * done there, but instead we do that here. */
-				struct mesh_reply* reply_list = mstate->reply_list;
 				verbose(VERB_ALGO, "drop reply, it is older than discard-timeout");
 				infra_wait_limit_dec(mstate->s.env->infra_cache,
 					&r->query_reply, mstate->s.env->cfg);
-				mstate->reply_list = NULL;
-				if(r->query_reply.c->use_h2)
+				if(r->query_reply.c->tcp_req_info)
+					tcp_req_info_remove_mesh_state(
+						r->query_reply.c->tcp_req_info,
+						mstate);
+				else if(r->query_reply.c->use_h2)
 					http2_stream_remove_mesh_state(r->h2_stream);
+				else if(r->query_reply.doq_stream)
+					doq_stream_remove_mesh_state(r->query_reply.doq_stream);
 				comm_point_drop_reply(&r->query_reply);
-				mstate->reply_list = reply_list;
 				log_assert(mstate->s.env->mesh->num_reply_addrs > 0);
 				mstate->s.env->mesh->num_reply_addrs--;
 				mstate->s.env->mesh->num_queries_discard_timeout++;
@@ -1853,20 +1864,17 @@ void mesh_query_done(struct mesh_state* mstate)
 		/* if this query is determined to be dropped during the
 		 * mesh processing, this is the point to take that action. */
 		if(mstate->s.is_drop) {
-			/* briefly set the reply_list to NULL, so that the
-			 * tcp req info cleanup routine that calls the mesh
-			 * to deregister the meshstate for it is not done
-			 * because the list is NULL and also accounting is not
-			 * done there, but instead we do that here. */
-			struct mesh_reply* reply_list = mstate->reply_list;
 			infra_wait_limit_dec(mstate->s.env->infra_cache,
 				&r->query_reply, mstate->s.env->cfg);
-			mstate->reply_list = NULL;
-			if(r->query_reply.c->use_h2) {
+			if(r->query_reply.c->tcp_req_info) {
+				tcp_req_info_remove_mesh_state(
+					r->query_reply.c->tcp_req_info, mstate);
+			} else if(r->query_reply.c->use_h2) {
 				http2_stream_remove_mesh_state(r->h2_stream);
+			} else if(r->query_reply.doq_stream) {
+				doq_stream_remove_mesh_state(r->query_reply.doq_stream);
 			}
 			comm_point_drop_reply(&r->query_reply);
-			mstate->reply_list = reply_list;
 			log_assert(mstate->s.env->mesh->num_reply_addrs > 0);
 			mstate->s.env->mesh->num_reply_addrs--;
 		} else {
@@ -1907,18 +1915,6 @@ void mesh_query_done(struct mesh_state* mstate)
 		}
 	}
 
-	/* Mesh area accounting */
-	if(mstate->reply_list) {
-		mstate->reply_list = NULL;
-		if(!mstate->reply_list && !mstate->cb_list) {
-			/* was a reply state, not anymore */
-			log_assert(mstate->s.env->mesh->num_reply_states > 0);
-			mstate->s.env->mesh->num_reply_states--;
-		}
-		if(!mstate->reply_list && !mstate->cb_list &&
-			mstate->super_set.count == 0)
-			mstate->s.env->mesh->num_detached_states++;
-	}
 	mstate->replies_sent = 1;
 
 	while((c = mstate->cb_list) != NULL) {
@@ -2079,6 +2075,8 @@ int mesh_state_add_reply(struct mesh_state* s, struct edns_data* edns,
 	if(rep->c->use_h2)
 		r->h2_stream = rep->c->h2_stream;
 	else	r->h2_stream = NULL;
+	if(rep->c->type != comm_doq)
+		r->query_reply.doq_stream = NULL;
 
 	/* Data related to local alias stored in 'qinfo' (if any) is ephemeral
 	 * and can be different for different original queries (even if the
@@ -2284,8 +2282,29 @@ void mesh_run(struct mesh_area* mesh, struct mesh_state* mstate,
 	enum module_ev ev, struct outbound_entry* e)
 {
 	enum module_ext_state s;
+	int numrun = 0;
 	verbose(VERB_ALGO, "mesh_run: start");
 	while(mstate) {
+		if(numrun++ > MESH_MAX_RUN_ITER) {
+			/* These modules are too much to activate, stop them.*/
+			log_err("Too many module run iterations, deleting");
+			while(mstate) {
+				/* notify supers */
+				if(mstate->super_set.count > 0) {
+					verbose(VERB_ALGO, "notify supers of failure");
+					mstate->s.return_msg = NULL;
+					mstate->s.return_rcode = LDNS_RCODE_SERVFAIL;
+					mesh_walk_supers(mesh, mstate);
+				}
+				mesh_state_delete(&mstate->s);
+				if(mesh->run.count > 0) {
+					/* pop random element off the runnable tree */
+					mstate = (struct mesh_state*)mesh->run.root->key;
+					(void)rbtree_delete(&mesh->run, mstate);
+				} else mstate = NULL;
+			}
+			break;
+		}
 		/* run the module */
 		fptr_ok(fptr_whitelist_mod_operate(
 			mesh->mods.mod[mstate->s.curmod]->operate));
@@ -2437,7 +2456,8 @@ void mesh_list_remove(struct mesh_state* m, struct mesh_state** fp,
 }
 
 void mesh_state_remove_reply(struct mesh_area* mesh, struct mesh_state* m,
-	struct comm_point* cp, struct http2_stream* h2_stream)
+	struct comm_point* cp, struct http2_stream* h2_stream,
+	struct doq_stream* doq_stream)
 {
 	struct mesh_reply* n, *prev = NULL;
 	n = m->reply_list;
@@ -2446,7 +2466,8 @@ void mesh_state_remove_reply(struct mesh_area* mesh, struct mesh_state* m,
 	if(!n) return; /* nothing to remove, also no accounting needed */
 	while(n) {
 		if(n->query_reply.c == cp
-			&& (!h2_stream || n->h2_stream == h2_stream)) {
+			&& (!h2_stream || n->h2_stream == h2_stream)
+			&& (!doq_stream || n->query_reply.doq_stream == doq_stream)) {
 			/* unlink it */
 			if(prev) prev->next = n->next;
 			else m->reply_list = n->next;
@@ -2459,6 +2480,10 @@ void mesh_state_remove_reply(struct mesh_area* mesh, struct mesh_state* m,
 			 * share the same comm_point); make sure the streams
 			 * don't point back. */
 			if(n->h2_stream) n->h2_stream->mesh_state = NULL;
+#ifdef HAVE_NGTCP2
+			if(n->query_reply.doq_stream)
+				n->query_reply.doq_stream->mesh_state = NULL;
+#endif
 
 			/* prev = prev; */
 			n = n->next;
@@ -2479,7 +2504,6 @@ void mesh_state_remove_reply(struct mesh_area* mesh, struct mesh_state* m,
 	}
 }
 
-
 static int
 apply_respip_action(struct module_qstate* qstate,
 	const struct query_info* qinfo, struct respip_client_info* cinfo,
@@ -2499,9 +2523,10 @@ apply_respip_action(struct module_qstate* qstate,
 
 	/* xxx_deny actions mean dropping the reply, unless the original reply
 	 * was redirected to response-ip data. */
-	if((actinfo->action == respip_deny ||
+	if(actinfo->action == respip_always_deny ||
+		((actinfo->action == respip_deny ||
 		actinfo->action == respip_inform_deny) &&
-		*encode_repp == rep)
+		*encode_repp == rep))
 		*encode_repp = NULL;
 
 	return 1;
@@ -2566,12 +2591,15 @@ mesh_serve_expired_callback(void* arg)
 			qstate->client_info, &actinfo, msg->rep, &alias_rrset, &encode_rep,
 			qstate->env->auth_zones)) {
 			return;
-		} else if(partial_rep &&
-			!respip_merge_cname(partial_rep, &qstate->qinfo, msg->rep,
+		} else if(partial_rep) {
+			if(!respip_merge_cname(partial_rep, &qstate->qinfo, msg->rep,
 			qstate->client_info, must_validate, &encode_rep, qstate->region,
 			qstate->env->auth_zones, qstate->env->views,
 			qstate->env->respip_set)) {
-			return;
+				return;
+			}
+			/* merge succeeded; final reply, no further alias pass */
+			partial_rep = NULL;
 		}
 		if(!encode_rep || alias_rrset) {
 			if(!encode_rep) {
@@ -2582,6 +2610,7 @@ mesh_serve_expired_callback(void* arg)
 				partial_rep = encode_rep;
 			}
 		}
+		msg->rep = encode_rep;
 		/* We've found a partial reply ending with an
 		* alias.  Replace the lookup qinfo for the
 		* alias target and lookup the cache again to
@@ -2607,29 +2636,41 @@ mesh_serve_expired_callback(void* arg)
 	if(verbosity >= VERB_ALGO)
 		log_dns_msg("Serve expired lookup", &qstate->qinfo, msg->rep);
 
-	for(r = mstate->reply_list; r; r = r->next) {
-		struct timeval old;
-		timeval_subtract(&old, mstate->s.env->now_tv, &r->start_time);
-		if(mstate->s.env->cfg->discard_timeout != 0 &&
+	while((r = mesh_reply_list_pop_first(mstate)) != NULL) {
+
+		/* it was not detached (because it had a reply list), could be now */
+		if(!mstate->reply_list && !mstate->cb_list
+			&& mstate->super_set.count == 0) {
+			mesh->num_detached_states++;
+		}
+		/* if not replies any more in mstate, it is no longer a reply_state */
+		if(!mstate->reply_list && !mstate->cb_list) {
+			log_assert(mesh->num_reply_states > 0);
+			mesh->num_reply_states--;
+		}
+		if(mesh_is_udp(r)) {
+		    struct timeval old;
+		    timeval_subtract(&old, mstate->s.env->now_tv, &r->start_time);
+		    if(mstate->s.env->cfg->discard_timeout != 0 &&
 			((int)old.tv_sec)*1000+((int)old.tv_usec)/1000 >
 			mstate->s.env->cfg->discard_timeout) {
 			/* Drop the reply, it is too old */
-			/* briefly set the reply_list to NULL, so that the
-			 * tcp req info cleanup routine that calls the mesh
-			 * to deregister the meshstate for it is not done
-			 * because the list is NULL and also accounting is not
-			 * done there, but instead we do that here. */
-			struct mesh_reply* reply_list = mstate->reply_list;
 			verbose(VERB_ALGO, "drop reply, it is older than discard-timeout");
 			infra_wait_limit_dec(mstate->s.env->infra_cache,
 				&r->query_reply, mstate->s.env->cfg);
-			mstate->reply_list = NULL;
-			if(r->query_reply.c->use_h2)
+			if(r->query_reply.c->tcp_req_info)
+				tcp_req_info_remove_mesh_state(
+					r->query_reply.c->tcp_req_info, mstate);
+			else if(r->query_reply.c->use_h2)
 				http2_stream_remove_mesh_state(r->h2_stream);
+			else if(r->query_reply.doq_stream)
+				doq_stream_remove_mesh_state(r->query_reply.doq_stream);
 			comm_point_drop_reply(&r->query_reply);
-			mstate->reply_list = reply_list;
+			log_assert(mstate->s.env->mesh->num_reply_addrs > 0);
+			mstate->s.env->mesh->num_reply_addrs--;
 			mstate->s.env->mesh->num_queries_discard_timeout++;
 			continue;
+		    }
 		}
 
 		i++;
@@ -2662,8 +2703,7 @@ mesh_serve_expired_callback(void* arg)
 		if(r->query_reply.c->tcp_req_info)
 			tcp_req_info_remove_mesh_state(r->query_reply.c->tcp_req_info, mstate);
 		/* mesh_send_reply removed mesh state from http2_stream. */
-		infra_wait_limit_dec(mstate->s.env->infra_cache,
-			&r->query_reply, mstate->s.env->cfg);
+		/* mesh_send_reply decremented wait_limit. */
 		prev = r;
 		prev_buffer = r_buffer;
 	}
@@ -2679,18 +2719,6 @@ mesh_serve_expired_callback(void* arg)
 			else
 				qstate->env->mesh->rpz_action[
 					respip_action_to_rpz_action(actinfo.action)] += i;
-		}
-	}
-
-	/* Mesh area accounting */
-	if(mstate->reply_list) {
-		mstate->reply_list = NULL;
-		if(!mstate->reply_list && !mstate->cb_list) {
-			log_assert(mesh->num_reply_states > 0);
-			mesh->num_reply_states--;
-			if(mstate->super_set.count == 0) {
-				mesh->num_detached_states++;
-			}
 		}
 	}
 

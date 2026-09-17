@@ -122,6 +122,10 @@
 #define NUM_UDP_PER_SELECT 1
 #endif
 
+/** The number of TCP queries over a TCP connection, per read indication
+ * from select. */
+#define NUM_TCP_PER_SELECT 100
+
 /** timeout in millisec to wait for write to unblock, packets dropped after.*/
 #define SEND_BLOCKED_WAIT_TIMEOUT 200
 /** max number of times to wait for write to unblock, packets dropped after.*/
@@ -1835,7 +1839,6 @@ doq_send_retry(struct comm_point* c, struct doq_pkt_addr* paddr,
 	char host[256], port[32];
 	struct ngtcp2_cid scid;
 	uint8_t token[NGTCP2_CRYPTO_MAX_RETRY_TOKENLEN];
-	ngtcp2_tstamp ts;
 	ngtcp2_ssize tokenlen, ret;
 
 	if(!doq_print_addr_port(&paddr->addr, paddr->addrlen, host,
@@ -1849,12 +1852,10 @@ doq_send_retry(struct comm_point* c, struct doq_pkt_addr* paddr,
 	scid.datalen = c->doq_socket->sv_scidlen;
 	doq_cid_randfill(&scid, scid.datalen, c->doq_socket->rnd);
 
-	ts = doq_get_timestamp_nanosec();
-
 	tokenlen = ngtcp2_crypto_generate_retry_token(token,
 		c->doq_socket->static_secret, c->doq_socket->static_secret_len,
 		hd->version, (void*)&paddr->addr, paddr->addrlen, &scid,
-		&hd->dcid, ts);
+		&hd->dcid, doq_get_timestamp_nanosec());
 	if(tokenlen < 0) {
 		log_err("ngtcp2_crypto_generate_retry_token failed: %s",
 			ngtcp2_strerror(tokenlen));
@@ -1903,13 +1904,11 @@ doq_verify_retry_token(struct comm_point* c, struct doq_pkt_addr* paddr,
 	struct ngtcp2_cid* ocid, struct ngtcp2_pkt_hd* hd)
 {
 	char host[256], port[32];
-	ngtcp2_tstamp ts;
 	if(!doq_print_addr_port(&paddr->addr, paddr->addrlen, host,
 		sizeof(host), port, sizeof(port))) {
 		log_err("doq_verify_retry_token failed");
 		return 0;
 	}
-	ts = doq_get_timestamp_nanosec();
 	verbose(VERB_ALGO, "doq: verifying retry token from %s %s", host,
 		port);
 	if(ngtcp2_crypto_verify_retry_token(ocid,
@@ -1921,7 +1920,7 @@ doq_verify_retry_token(struct comm_point* c, struct doq_pkt_addr* paddr,
 		c->doq_socket->static_secret,
 		c->doq_socket->static_secret_len, hd->version,
 		(void*)&paddr->addr, paddr->addrlen, &hd->dcid,
-		10*NGTCP2_SECONDS, ts) != 0) {
+		10*NGTCP2_SECONDS, doq_get_timestamp_nanosec()) != 0) {
 		verbose(VERB_ALGO, "doq: could not verify retry token "
 			"from %s %s", host, port);
 		return 0;
@@ -1936,13 +1935,11 @@ doq_verify_token(struct comm_point* c, struct doq_pkt_addr* paddr,
 	struct ngtcp2_pkt_hd* hd)
 {
 	char host[256], port[32];
-	ngtcp2_tstamp ts;
 	if(!doq_print_addr_port(&paddr->addr, paddr->addrlen, host,
 		sizeof(host), port, sizeof(port))) {
 		log_err("doq_verify_token failed");
 		return 0;
 	}
-	ts = doq_get_timestamp_nanosec();
 	verbose(VERB_ALGO, "doq: verifying token from %s %s", host, port);
 	if(ngtcp2_crypto_verify_regular_token(
 #ifdef HAVE_STRUCT_NGTCP2_PKT_HD_TOKENLEN
@@ -1952,7 +1949,7 @@ doq_verify_token(struct comm_point* c, struct doq_pkt_addr* paddr,
 #endif
 		c->doq_socket->static_secret, c->doq_socket->static_secret_len,
 		(void*)&paddr->addr, paddr->addrlen, 3600*NGTCP2_SECONDS,
-		ts) != 0) {
+		doq_get_timestamp_nanosec()) != 0) {
 		verbose(VERB_ALGO, "doq: could not verify token from %s %s",
 			host, port);
 		return 0;
@@ -2179,6 +2176,7 @@ doq_pickup_timer(struct comm_point* c)
 {
 	struct doq_timer* t;
 	struct timeval tv;
+	ngtcp2_tstamp ts = 0;
 	int have_time = 0;
 	memset(&tv, 0, sizeof(tv));
 
@@ -2188,27 +2186,24 @@ doq_pickup_timer(struct comm_point* c)
 			t->worker_doq_socket == c->doq_socket) {
 			/* pick up this element */
 			t->worker_doq_socket = c->doq_socket;
+			memcpy(&tv, &t->time_real, sizeof(tv));
+			ts = t->time_mono;
 			have_time = 1;
-			memcpy(&tv, &t->time, sizeof(tv));
 			break;
 		}
 	}
 	lock_rw_unlock(&c->doq_socket->table->lock);
-
+	c->doq_socket->marked_time = ts;
 	if(have_time) {
 		struct timeval rel;
 		timeval_subtract(&rel, &tv, c->doq_socket->now_tv);
 		comm_timer_set(c->doq_socket->timer, &rel);
-		memcpy(&c->doq_socket->marked_time, &tv,
-			sizeof(c->doq_socket->marked_time));
 		verbose(VERB_ALGO, "doq pickup timer at %d.%6.6d in %d.%6.6d",
 			(int)tv.tv_sec, (int)tv.tv_usec, (int)rel.tv_sec,
 			(int)rel.tv_usec);
 	} else {
 		if(comm_timer_is_set(c->doq_socket->timer))
 			comm_timer_disable(c->doq_socket->timer);
-		memset(&c->doq_socket->marked_time, 0,
-			sizeof(c->doq_socket->marked_time));
 		verbose(VERB_ALGO, "doq timer disabled");
 	}
 }
@@ -2221,13 +2216,14 @@ doq_done_setup_timer_and_write(struct comm_point* c, struct doq_conn* conn)
 	uint8_t cid[NGTCP2_MAX_CIDLEN];
 	rbnode_type* node;
 	struct timeval new_tv;
+	ngtcp2_tstamp new_ts;
 	int write_change = 0, timer_change = 0;
 
 	/* No longer in callbacks, so the pointer to doq_socket is back
 	 * to NULL. */
 	conn->doq_socket = NULL;
 
-	if(doq_conn_check_timer(conn, &new_tv))
+	if(doq_conn_check_timer(conn, &new_tv, &new_ts))
 		timer_change = 1;
 	if( (conn->write_interest && !conn->on_write_list) ||
 		(!conn->write_interest && conn->on_write_list))
@@ -2273,7 +2269,7 @@ doq_done_setup_timer_and_write(struct comm_point* c, struct doq_conn* conn)
 	}
 	if(timer_change) {
 		doq_timer_set(c->doq_socket->table, &conn->timer,
-			c->doq_socket, &new_tv);
+			c->doq_socket, &new_tv, new_ts);
 	}
 	lock_rw_unlock(&c->doq_socket->table->lock);
 	lock_basic_unlock(&conn->lock);
@@ -2437,7 +2433,7 @@ doq_write_blocked_pkt(struct comm_point* c)
 	return 1;
 }
 
-/** doq find a timer that timeouted and return the conn, locked. */
+/** doq find a timer that timed out and return the conn, locked. */
 static struct doq_conn*
 doq_timer_timeout_conn(struct doq_server_socket* doq_socket)
 {
@@ -2450,7 +2446,7 @@ doq_timer_timeout_conn(struct doq_server_socket* doq_socket)
 		conn = t->conn;
 
 		/* If now < timer then no further timeouts in tree. */
-		if(timeval_smaller(doq_socket->now_tv, &t->time)) {
+		if(timeval_smaller(doq_socket->now_tv, &t->time_real)) {
 			lock_rw_unlock(&doq_socket->table->lock);
 			return NULL;
 		}
@@ -2473,11 +2469,11 @@ doq_timer_erase_marker(struct doq_server_socket* doq_socket)
 {
 	struct doq_timer* t;
 	lock_rw_wrlock(&doq_socket->table->lock);
-	t = doq_timer_find_time(doq_socket->table, &doq_socket->marked_time);
+	t = doq_timer_find_time(doq_socket->table, doq_socket->marked_time);
 	if(t && t->worker_doq_socket == doq_socket)
 		t->worker_doq_socket = NULL;
 	lock_rw_unlock(&doq_socket->table->lock);
-	memset(&doq_socket->marked_time, 0, sizeof(doq_socket->marked_time));
+	doq_socket->marked_time = 0;
 }
 
 void
@@ -2784,7 +2780,7 @@ doq_server_socket_create(struct doq_table* table, struct ub_randstate* rnd,
 		free(doq_socket);
 		return NULL;
 	}
-	memset(&doq_socket->marked_time, 0, sizeof(doq_socket->marked_time));
+	doq_socket->marked_time = 0;
 	comm_base_timept(base, &doq_socket->now_tt, &doq_socket->now_tv);
 	doq_socket->cfg = cfg;
 	return doq_socket;
@@ -3234,6 +3230,26 @@ static int http2_submit_settings(struct http2_session* h2_session)
 }
 #endif /* HAVE_NGHTTP2 */
 
+/** Clear http2 stream mesh states */
+static void http2_session_clear_meshstate(struct http2_session* h2_session)
+{
+#ifdef HAVE_NGHTTP2
+	/* Since the session gets closed, remove the mesh state references. */
+	struct http2_stream* h2_stream;
+	for(h2_stream = h2_session->first_stream; h2_stream;
+		h2_stream = h2_stream->next) {
+		if(h2_stream->mesh_state) {
+			mesh_state_remove_reply(h2_stream->mesh,
+				h2_stream->mesh_state, h2_session->c,
+				h2_stream, NULL);
+			h2_stream->mesh_state = NULL;
+		}
+	}
+#else
+	(void)h2_session;
+#endif /* HAVE_NGHTTP2 */
+}
+
 #ifdef HAVE_NGHTTP2
 /** Delete http2 stream. After session delete or stream close callback */
 static void http2_stream_delete(struct http2_session* h2_session,
@@ -3241,7 +3257,7 @@ static void http2_stream_delete(struct http2_session* h2_session,
 {
 	if(h2_stream->mesh_state) {
 		mesh_state_remove_reply(h2_stream->mesh, h2_stream->mesh_state,
-			h2_session->c, h2_stream);
+			h2_session->c, h2_stream, NULL);
 		h2_stream->mesh_state = NULL;
 	}
 	http2_req_stream_clear(h2_stream);
@@ -4629,6 +4645,10 @@ comm_point_tcp_handle_write(int fd, struct comm_point* c)
 static int
 tcp_req_info_read_again(int fd, struct comm_point* c)
 {
+	/* One event-loop visit drains at most this many pipelined queries;
+	 * the rest is re-queued, so that other file descriptors get
+	 * serviced in between. */
+	int budget = NUM_TCP_PER_SELECT;
 	while(c->tcp_req_info->read_again) {
 		int r;
 		c->tcp_req_info->read_again = 0;
@@ -4645,6 +4665,16 @@ tcp_req_info_read_again(int fd, struct comm_point* c)
 			}
 			return 0;
 		}
+		if(--budget <= 0 && c->tcp_req_info->read_again) {
+			/* Defer the rest of the drain to the next loop turn.
+			 * This uses a zero delay timer. For TLS the undrained
+			 * remainder sits in OpenSSL's user-space buffer. */
+			struct timeval tv;
+			memset(&tv, 0, sizeof(tv));
+			verbose(VERB_ALGO, "Defer tcp_req_info read again");
+			comm_timer_set(c->tcp_req_info->read_again_timer, &tv);
+			return 1;
+		}
 	}
 	return 1;
 }
@@ -4658,6 +4688,7 @@ tcp_more_read_again(int fd, struct comm_point* c)
 	/* this continues until the read routines get EAGAIN or so,
 	 * and thus does not call the callback, and the bool is 0 */
 	int* moreread = c->tcp_more_read_again;
+	int budget = NUM_TCP_PER_SELECT;
 	while(moreread && *moreread) {
 		*moreread = 0;
 		if(!comm_point_tcp_handle_read(fd, c, 0)) {
@@ -4668,6 +4699,30 @@ tcp_more_read_again(int fd, struct comm_point* c)
 				(void)(*c->callback)(c, c->cb_arg,
 					NETEVENT_CLOSED, NULL);
 			}
+			return;
+		}
+		if(--budget <= 0 && *moreread) {
+			/* Defer the rest of the drain to the next loop turn.
+			 * This uses a zero delay timer. For TLS the undrained
+			 * remainder sits in OpenSSL's user-space buffer. */
+			struct timeval tv;
+			memset(&tv, 0, sizeof(tv));
+			if(!c->tcp_more_read_again_timer) {
+				c->tcp_more_read_again_timer = comm_timer_create(c->ev->base, tcp_more_read_again_cb, c);
+				if(!c->tcp_more_read_again_timer) {
+					log_err("out of memory for tcp more read again timer");
+					reclaim_tcp_handler(c);
+					if(!c->tcp_do_close) {
+						fptr_ok(fptr_whitelist_comm_point(
+							c->callback));
+						(void)(*c->callback)(c, c->cb_arg,
+							NETEVENT_CLOSED, NULL);
+					}
+					return;
+				}
+			}
+			verbose(VERB_ALGO, "Defer more read again");
+			comm_timer_set(c->tcp_more_read_again_timer, &tv);
 			return;
 		}
 	}
@@ -4695,6 +4750,23 @@ tcp_more_write_again(int fd, struct comm_point* c)
 			return;
 		}
 	}
+}
+
+void
+tcp_read_again_cb(void* arg)
+{
+	struct tcp_req_info* req = (struct tcp_req_info*)arg;
+	verbose(VERB_ALGO, "tcp_read_again_cb");
+	if(!tcp_req_info_read_again(req->cp->fd, req->cp))
+		return;
+}
+
+void
+tcp_more_read_again_cb(void* arg)
+{
+	struct comm_point* c = (struct comm_point*)arg;
+	verbose(VERB_ALGO, "tcp_more_read_again_cb");
+	tcp_more_read_again(c->fd, c);
 }
 
 void
@@ -6139,7 +6211,7 @@ comm_point_create_tcp_handler(struct comm_base *base,
 	c->pp2_enabled = parent->pp2_enabled;
 	c->pp2_header_state = pp2_header_none;
 	if(spoolbuf) {
-		c->tcp_req_info = tcp_req_info_create(spoolbuf);
+		c->tcp_req_info = tcp_req_info_create(base, spoolbuf);
 		if(!c->tcp_req_info) {
 			log_err("could not create tcp commpoint");
 			sldns_buffer_free(c->buffer);
@@ -6701,6 +6773,9 @@ comm_point_close(struct comm_point* c)
 		*c->tcp_more_read_again = 0;
 	if(c->tcp_more_write_again && *c->tcp_more_write_again)
 		*c->tcp_more_write_again = 0;
+	if(c->tcp_more_read_again_timer &&
+		comm_timer_is_set(c->tcp_more_read_again_timer))
+		comm_timer_disable(c->tcp_more_read_again_timer);
 
 	/* close fd after removing from event lists, or epoll.. is messed up */
 	if(c->fd != -1 && !c->do_not_close) {
@@ -6740,6 +6815,7 @@ comm_point_delete(struct comm_point* c)
 		free(c->tcp_handlers);
 	}
 	free(c->timeout);
+	comm_timer_delete(c->tcp_more_read_again_timer);
 	if(c->type == comm_tcp || c->type == comm_local || c->type == comm_http) {
 		sldns_buffer_free(c->buffer);
 #ifdef USE_DNSCRYPT
@@ -6784,7 +6860,9 @@ comm_point_send_reply(struct comm_reply *repinfo)
 	log_assert(repinfo && repinfo->c);
 #ifdef USE_DNSCRYPT
 	buffer = repinfo->c->dnscrypt_buffer;
-	if(!dnsc_handle_uncurved_request(repinfo)) {
+	if(!dnsc_handle_uncurved_request(repinfo,
+		repinfo->c->tcp_req_info?
+		repinfo->c->tcp_req_info->spool_buffer:repinfo->c->buffer)) {
 		return;
 	}
 #else
@@ -6878,6 +6956,7 @@ comm_point_drop_reply(struct comm_reply* repinfo)
 	if(repinfo->c->type == comm_http) {
 		if(repinfo->c->h2_session) {
 			repinfo->c->h2_session->is_drop = 1;
+			http2_session_clear_meshstate(repinfo->c->h2_session);
 			if(!repinfo->c->h2_session->postpone_drop)
 				reclaim_http_handler(repinfo->c);
 			return;
@@ -7042,8 +7121,12 @@ comm_timer_disable(struct comm_timer* timer)
 {
 	if(!timer)
 		return;
-	ub_timer_del(timer->ev_timer->ev);
-	timer->ev_timer->enabled = 0;
+	/* The event backend can not always deal with event del if it was not
+	 * added before. For that, there is a check if it was added here.*/
+	if(timer->ev_timer->enabled) {
+		ub_timer_del(timer->ev_timer->ev);
+		timer->ev_timer->enabled = 0;
+	}
 }
 
 void
